@@ -1,9 +1,10 @@
+awscli==1.38.21
+datasets==3.4.1
 Flask==3.1.0
 Flask-Cors==5.0.1
+huggingface-hub==0.29.3
 pandas==2.2.3
-awscli==1.38.21
-# transformers==4.50.2
-# datasets==3.4.1
-# trl==0.16.0
-# huggingface-hub==0.29.3
-# torch==2.6.0
+transformers==4.50.2
+trl==0.16.0
+torch==2.6.0
+vllm==0.8.2
