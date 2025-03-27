@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 # FROM nvidia/cuda:12.6.3-base-ubuntu24.04
+# FROM vllm/vllm-openai:v0.8.2
 FROM python:3.11-slim
 
 # # Install necessary packages and CUDA toolkit
