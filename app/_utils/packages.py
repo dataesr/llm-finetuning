@@ -1,5 +1,5 @@
-import importlib.metadata as metadata
 import sys
+import importlib.metadata as metadata
 
 
 def read_requirements(file_path="requirements.txt"):
