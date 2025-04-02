@@ -6,8 +6,8 @@ router = APIRouter()
 
 @router.get("/test")
 def test():
-    test = load("abstract_ouvrirlascience.json")
+    test = load("test.json")
     if test is None:
         return {"error": "dataset not loaded"}
-    test_dict = test.to_dict(orient="records")
+    test_dict = test.to_dict()
     return test_dict
