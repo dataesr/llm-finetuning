@@ -3,19 +3,21 @@ FROM nvidia/cuda:12.6.3-base-ubuntu24.04
 
 WORKDIR /
 
-# Install AWS CLI
-# RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-#   unzip awscliv2.zip && \
-#   ./aws/install && \
-#   rm -rf awscliv2.zip aws/
-
-# Install python
+# Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  curl \
+  unzip \
   python3 \
   python3-pip \
   python3-venv \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+  unzip awscliv2.zip && \
+  ./aws/install && \
+  rm -rf awscliv2.zip aws/
 
 # Disable python buffering
 ENV PYTHONUNBUFFERED=1

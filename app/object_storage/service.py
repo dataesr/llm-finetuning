@@ -5,7 +5,7 @@ from app.aws import service as aws_service
 logger = get_logger(__name__)
 
 
-def upload_file(file_name, bucket, object_name=None, is_public=False):
+def upload_file(file_name, bucket, object_name=None):
     """Upload a file to an s3 bucket
 
     Args:
