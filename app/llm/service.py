@@ -3,7 +3,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, setup_chat_format
-from app.datasets import service as dataset_service
+from app.datasets import service as datasets_service
 from app.logging import get_logger
 
 BUCKET = "llm-jobs"
@@ -63,12 +63,11 @@ def initialize(output_model_name: str) -> str:
 
 def load_pretrained_model(model_name: str):
     logger.debug(f"Start loading model {model_name}")
-    compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=bnb_load_in_4bit,
         bnb_4bit_quant_type=bnb_4bit_quant_type,
-        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_compute_dtype=getattr(torch, bnb_4bit_compute_dtype),
         bnb_4bit_use_double_quant=bnb_4bit_use_double_quant,
     )
     # Load model
@@ -168,6 +167,10 @@ def save_model(trainer, tokenizer, output_model_name, output_dir):
     return True
 
 
+def push_model(model, hub: str):
+    model.push_to_hub(hub)
+
+
 def fine_tune(model_name: str, dataset_name: str, output_model_name: str):
     logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
@@ -175,7 +178,7 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str):
     output_dir = initialize(output_model_name)
 
     # Load dataset
-    dataset = dataset_service.load(dataset_name)
+    dataset = datasets_service.load(dataset_name)
 
     # Load the model and the tokenizer
     model, tokenizer = load_pretrained_model(model_name)

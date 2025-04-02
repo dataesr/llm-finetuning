@@ -10,6 +10,7 @@ docker-build:
 
 docker-run:
 	@echo Running a new docker image
+	docker image prune -f
 	docker-compose up -d --build
 
 docker-push:
