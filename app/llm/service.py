@@ -140,7 +140,8 @@ def train_model(model, tokenizer, dataset, output_dir: str):
     return trainer
 
 
-def save_model(trainer, tokenizer, output_model_name, output_dir):
+def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
+
     logger.debug(f"Start saving model to {output_dir}/{output_model_name}")
 
     model_to_save = (
@@ -159,6 +160,12 @@ def save_model(trainer, tokenizer, output_model_name, output_dir):
     # We also save the tokenizer
     tokenizer.save_pretrained(output_merged_dir)
 
+    # Push to hub if defined
+    if hub:
+        logger.debug(f"Pushing model and tokenizer to {hub}")
+        model.push_to_hub(repo_id=hub)
+        tokenizer.push_to_hub(repo_id=hub)
+
     # Free memory
     del model
     del tokenizer
@@ -167,11 +174,7 @@ def save_model(trainer, tokenizer, output_model_name, output_dir):
     return True
 
 
-def push_model(model, hub: str):
-    model.push_to_hub(hub)
-
-
-def fine_tune(model_name: str, dataset_name: str, output_model_name: str):
+def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
     logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Initialize llm folder
@@ -187,7 +190,7 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str):
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
 
     # Save the mode
-    is_saved = save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name)
+    is_saved = save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name, hub=hub)
 
     if is_saved:
         logger.error("Error while saving model.")
