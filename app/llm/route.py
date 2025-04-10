@@ -1,5 +1,5 @@
 import redis
-from rq import Connection, Queue
+from rq import Queue
 from fastapi import APIRouter, Request
 from .service import fine_tune
 from app.logging import get_logger
@@ -24,10 +24,9 @@ def run_ft(request: Request):
     output_model_name = args.get("output_model_name")
     huggingface_hub = args.get("huggingface_hub")
     # assert(args.get('PUBLIC_API_PASSWORD') == PUBLIC_API_PASSWORD)
-    with Connection(redis.from_url(REDIS_URL)):
-        q = Queue("llm", default_timeout=216000)
-        logger.debug("Starting task fine_tune")
-        logger.debug(args)
-        task = q.enqueue(fine_tune, model_name, dataset_name, output_model_name, huggingface_hub)
+    q = Queue("llm", connection=redis.from_url(REDIS_URL), default_timeout=216000)
+    logger.debug("Starting task fine_tune")
+    logger.debug(args)
+    task = q.enqueue(fine_tune, model_name, dataset_name, output_model_name, huggingface_hub)
     response = {"status": "success", "data": {"task_id": task.get_id()}}
     return response

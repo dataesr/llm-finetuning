@@ -41,5 +41,5 @@ COPY app ./app
 # Expose app port
 EXPOSE 8080
 
-# ./venv/bin/fastapi
+# use ./venv/bin/fastapi if nvidia/cuda:12.6.3-base-ubuntu24.04
 CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8080"]
