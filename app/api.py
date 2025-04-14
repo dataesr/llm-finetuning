@@ -3,6 +3,7 @@ from rq import Queue
 from fastapi import APIRouter
 from fastapi.encoders import jsonable_encoder
 from app._utils.packages import get_installed_versions
+from app.redis import service as redis_service
 from app.datasets.route import router as datasets_router
 from app.llm.route import router as llm_router
 
@@ -23,7 +24,7 @@ def versions():
 
 @router.get("/redis")
 def redis_jobs():
-    q = Queue("llm", connection=redis.from_url(REDIS_URL))
+    q = redis_service.get_queue()
     return {"Current jobs in 'llm' queue": q.count}
 
 

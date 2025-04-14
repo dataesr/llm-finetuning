@@ -1,10 +1,8 @@
 import redis
-from rq import Queue
 from fastapi import APIRouter, Request
 from .service import fine_tune
+from app.redis import service as redis_service
 from app.logging import get_logger
-
-REDIS_URL = "redis://redis:6379/0"
 
 router = APIRouter()
 
@@ -17,14 +15,14 @@ def test():
 
 
 @router.post("/ft")
-def run_ft(request: Request):
-    args = request.json()
+async def run_ft(request: Request):
+    args = await request.json()
     model_name = args.get("model_name")
     dataset_name = args.get("dataset_name")
     output_model_name = args.get("output_model_name")
     huggingface_hub = args.get("huggingface_hub")
     # assert(args.get('PUBLIC_API_PASSWORD') == PUBLIC_API_PASSWORD)
-    q = Queue("llm", connection=redis.from_url(REDIS_URL), default_timeout=216000)
+    q = redis_service.get_queue()
     logger.debug("Starting task fine_tune")
     logger.debug(args)
     task = q.enqueue(fine_tune, model_name, dataset_name, output_model_name, huggingface_hub)
