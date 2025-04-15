@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu24.04
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
 WORKDIR /
 
@@ -13,17 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Install AWS CLI
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-  unzip awscliv2.zip && \
-  ./aws/install && \
-  rm -rf awscliv2.zip aws/
-
-# Disable python buffering
-ENV PYTHONUNBUFFERED=1
-# Needed for python env (?)
-ENV CUDA_VISIBLE_DEVICES=0
-
 # Create python virtual environment
 RUN python3 -m venv venv
 ENV PATH="./venv/bin:$PATH"
@@ -35,8 +24,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}
 
 # Copy application code
-RUN mkdir /app
-COPY app ./app
+WORKDIR /script
+COPY script ./script
 
-# use ./venv/bin/fastapi if nvidia/cuda:12.6.3-base-ubuntu24.04
-CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0"]
+CMD ["python3", "script/main.py"]

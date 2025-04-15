@@ -3,9 +3,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, setup_chat_format
-from app.datasets import service as datasets_service
-from app.aws import service as aws_service
-from app.logging import get_logger
+from code import dataset as datasets_service
+from script.logging import get_logger
 
 BUCKET = "llm-outputs"
 FOLDER = "llm"
@@ -56,7 +55,7 @@ def initialize(output_model_name: str) -> str:
     """Initialize llm folder"""
     is_folder = os.path.isdir(FOLDER)
     if not is_folder:
-        os.makedirs(FOLDER)
+        logger.error(f"Folder {FOLDER} not found on storage!")
 
     output_dir = f"{FOLDER}/{output_model_name}"
     return output_dir
@@ -163,7 +162,7 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
 
     # Push to hub if defined
     if hub:
-        logger.debug(f"Pushing model and tokenizer to {hub}")
+        logger.debug(f"Pushing model and tokenizer to huggingface hub {hub}")
         model.push_to_hub(repo_id=hub)
         tokenizer.push_to_hub(repo_id=hub)
 
@@ -173,15 +172,6 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
     del trainer
 
     return True
-
-
-def upload_model(output_dir, output_model_name):
-    logger.debug(f"Start upload {output_model_name} into bucket {BUCKET}")
-    output_merged_dir = os.path.join(output_dir, output_model_name)
-
-    # Sync to object storage
-    is_uploaded = aws_service.upload(output_merged_dir, BUCKET, output_model_name, is_directory=True)
-    return is_uploaded
 
 
 def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
