@@ -3,8 +3,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, setup_chat_format
-from code import dataset as datasets_service
-from script.logging import get_logger
+from dataset import get_dataset
+from logger import get_logger
 
 BUCKET = "llm-outputs"
 FOLDER = "llm"
@@ -177,11 +177,15 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
 def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
     logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
+    # Default model name
+    if not output_model_name:
+        output_model_name = f"{model_name}-finetuned"
+
     # Initialize llm folder
     output_dir = initialize(output_model_name)
 
     # Load dataset
-    dataset = datasets_service.load(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     # Load the model and the tokenizer
     model, tokenizer = load_pretrained_model(model_name)

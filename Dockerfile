@@ -24,7 +24,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}
 
 # Copy application code
-WORKDIR /script
+RUN mkdir script
 COPY script ./script
 
 CMD ["python3", "script/main.py"]

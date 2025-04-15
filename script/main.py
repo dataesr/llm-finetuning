@@ -3,9 +3,9 @@
 # Description : Fine-tuning script for @dataesr
 """
 
-from script.args import get_args
-from script.pipeline import fine_tune
-from script.logging import get_logger
+from args import get_args
+from pipeline import fine_tune
+from logger import get_logger
 
 logger = get_logger(__name__)
 

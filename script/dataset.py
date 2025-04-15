@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from datasets import load_dataset, Dataset
-from script.logging import get_logger
+from logger import get_logger
 
 logger = get_logger(name=__name__)
 
@@ -23,7 +23,7 @@ def initialize(object_name: str):
     return file_name
 
 
-def load(object_name: str) -> Dataset:
+def get_dataset(object_name: str) -> Dataset:
     """Get a dataset from storage.
 
     Args:
