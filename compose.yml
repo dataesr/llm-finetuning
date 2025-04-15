@@ -1,7 +1,0 @@
-services:
-  api:
-    build: .
-    image: llm_finetuning
-    env_file:
-      - .env
-    container_name: llm_finetuning
