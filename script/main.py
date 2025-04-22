@@ -16,7 +16,7 @@ def main():
     logger.debug(f"Start fine-tuning script with args {args}")
 
     # Fine-tuning pipeline
-    # fine_tune(args.model_name, args.dataset_name, args.output_model_name, args.hf_hub)
+    fine_tune(args.model_name, args.dataset_name, args.output_model_name, args.hf_hub)
 
 
 if __name__ == "__main__":

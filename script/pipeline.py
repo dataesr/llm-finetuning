@@ -1,13 +1,14 @@
 import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
+import shutil
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
-from trl import SFTTrainer, setup_chat_format
+from trl import SFTTrainer, SFTConfig, setup_chat_format
 from dataset import get_dataset
 from logger import get_logger
 
-BUCKET = "llm-outputs"
-FOLDER = "llm"
+BUCKET = "llm-jobs"
+FOLDER = "jobs"
 
 logger = get_logger(__name__)
 
@@ -17,8 +18,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lora_r = 64  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
 lora_dropout = 0.1  # The dropout probability for Lora layers.
-lora_task_type = ("CAUSAL_LM",)
-lora_target_modules = (["q_proj", "v_proj"],)
+lora_task_type = "CAUSAL_LM"
+lora_target_modules = ["q_proj", "v_proj"]
 # For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
@@ -30,9 +31,9 @@ bnb_4bit_quant_type = "nf4"  # Quantization data type
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
-max_seq_length = (
-    8192  # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
-)
+# Context window length. Llama can now technically push further, but I find attention is no longer working so well.
+max_seq_length = 8192
+
 num_train_epochs = 1  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -51,14 +52,22 @@ group_by_length = True  # Group together samples of roughly the same length in t
 packing = False  # Pack short exemple to ecrease efficiency
 
 
-def initialize(output_model_name: str) -> str:
+def initialize(model_name: str, output_model_name: str) -> str:
     """Initialize llm folder"""
-    is_folder = os.path.isdir(FOLDER)
-    if not is_folder:
+    # Default model name
+    if not output_model_name:
+        output_model_name = f"{model_name.split("/")[-1]}-finetuned"
+
+    if not os.path.isdir(FOLDER):
         logger.error(f"Folder {FOLDER} not found on storage!")
 
+    # Reset output folder
     output_dir = f"{FOLDER}/{output_model_name}"
-    return output_dir
+    if os.path.isdir(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    return output_model_name, output_dir
 
 
 def load_pretrained_model(model_name: str):
@@ -77,11 +86,13 @@ def load_pretrained_model(model_name: str):
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.padding_side = "right"  # to prevent warinings
+    tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
 
     # Set chat template to OAI chatML
     model, tokenizer = setup_chat_format(model, tokenizer)
+    model.resize_token_embeddings(len(tokenizer))
+    logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
 
     torch.cuda.empty_cache()
 
@@ -101,7 +112,7 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         target_modules=lora_target_modules,
     )
 
-    training_arguments = TrainingArguments(
+    training_arguments = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
@@ -119,7 +130,8 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         group_by_length=group_by_length,
         lr_scheduler_type=lr_scheduler_type,
         report_to=report_to,
-        # max_seq_length=max_seq_length,
+        packing=packing,
+        max_seq_length=max_seq_length,
     )
 
     trainer = SFTTrainer(
@@ -127,9 +139,7 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         args=training_arguments,
         train_dataset=dataset,
         peft_config=peft_config,
-        packing=packing,
         processing_class=tokenizer,
-        max_seq_length=max_seq_length,
     )
 
     # Training
@@ -142,16 +152,18 @@ def train_model(model, tokenizer, dataset, output_dir: str):
 
 def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
 
-    logger.debug(f"Start saving model to {output_dir}/{output_model_name}")
+    logger.debug(f"Start saving model to {output_dir}")
 
     model_to_save = (
         trainer.model.module if hasattr(trainer.model, "module") else trainer.model
     )  # Take care of distributed/parallel training
-    model_to_save.save_pretrained(output_model_name)
+    model_to_save.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    
+    logger.debug("Tokenizer vocab size:", len(tokenizer))
+    logger.debug("Model embeddings size:", model_to_save.get_input_embeddings().weight.shape)
 
-    torch.cuda.empty_cache()
-
-    model = AutoPeftModelForCausalLM.from_pretrained(output_model_name, device_map="auto", torch_dtype=torch.bfloat16)
+    model = AutoPeftModelForCausalLM.from_pretrained(output_dir, device_map=device_map, torch_dtype=torch.bfloat16)
     model = model.merge_and_unload()
 
     output_merged_dir = os.path.join(output_dir, output_model_name)
@@ -167,6 +179,7 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
         tokenizer.push_to_hub(repo_id=hub)
 
     # Free memory
+    torch.cuda.empty_cache()
     del model
     del tokenizer
     del trainer
@@ -177,12 +190,8 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
 def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
     logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
-    # Default model name
-    if not output_model_name:
-        output_model_name = f"{model_name}-finetuned"
-
     # Initialize llm folder
-    output_dir = initialize(output_model_name)
+    output_model_name, output_dir = initialize(model_name, output_model_name)
 
     # Load dataset
     dataset = get_dataset(dataset_name)
