@@ -1,14 +1,15 @@
 import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
-from trl import SFTTrainer, setup_chat_format
-from app.datasets import service as datasets_service
-from app.aws import service as aws_service
-from app.logging import get_logger
+from trl import SFTTrainer, SFTConfig, setup_chat_format
+from _utils import get_default_output_name, reset_folder
+from hugging import upload_model_to_hub
+from dataset import get_dataset
+from logger import get_logger
 
-BUCKET = "llm-outputs"
-FOLDER = "llm"
+FOLDER = "jobs"
+MERGED_FOLDER = "merged"
 
 logger = get_logger(__name__)
 
@@ -18,8 +19,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lora_r = 64  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
 lora_dropout = 0.1  # The dropout probability for Lora layers.
-lora_task_type = ("CAUSAL_LM",)
-lora_target_modules = (["q_proj", "v_proj"],)
+lora_task_type = "CAUSAL_LM"
+lora_target_modules = ["q_proj", "v_proj"]
 # For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
@@ -31,9 +32,9 @@ bnb_4bit_quant_type = "nf4"  # Quantization data type
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
-max_seq_length = (
-    8192  # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
-)
+# Context window length. Llama can now technically push further, but I find attention is no longer working so well.
+max_seq_length = 8192
+
 num_train_epochs = 1  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -52,18 +53,44 @@ group_by_length = True  # Group together samples of roughly the same length in t
 packing = False  # Pack short exemple to ecrease efficiency
 
 
-def initialize(output_model_name: str) -> str:
-    """Initialize llm folder"""
-    is_folder = os.path.isdir(FOLDER)
-    if not is_folder:
-        os.makedirs(FOLDER)
+def initialize(model_name: str, output_model_name=None) -> tuple:
+    """
+    Initialize llm folder
 
+    Args:
+    - model_name (str): Base model to finetune
+    - output_model_name (str): Finetuned model name. Default to None
+
+    Returns:
+    - output_model_name (str): Finetuned model name
+    - output_dir (str): Finetuned model directory
+    """
+    # Default model name
+    if not output_model_name:
+        output_model_name = get_default_output_name(model_name)
+
+    if not os.path.isdir(FOLDER):
+        raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
+
+    # Reset output folder
     output_dir = f"{FOLDER}/{output_model_name}"
-    return output_dir
+    reset_folder(output_dir)
+
+    return output_model_name, output_dir
 
 
 def load_pretrained_model(model_name: str):
-    logger.debug(f"Start loading model {model_name}")
+    """
+    Load pretrained model from huggingface
+
+    Args:
+    - model_name (str): Model to load
+
+    Returns:
+    - model: Loaded model
+    - tokenizer: Loaded tokenizer
+    """
+    logger.info(f"Start loading model {model_name}")
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=bnb_load_in_4bit,
@@ -78,21 +105,35 @@ def load_pretrained_model(model_name: str):
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.padding_side = "right"  # to prevent warinings
+    tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
 
     # Set chat template to OAI chatML
     model, tokenizer = setup_chat_format(model, tokenizer)
+    model.resize_token_embeddings(len(tokenizer))
+    logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
 
     torch.cuda.empty_cache()
 
-    logger.debug(f"Model and tokenizer loaded!")
+    logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
 
 
 def train_model(model, tokenizer, dataset, output_dir: str):
-    logger.debug(f"Start training model")
+    """
+    Train model with custom dataset
+
+    Args:
+    - model: Model to be trained
+    - tokenizer: Model tokenizer
+    - dataset: Dataset to use for training
+    - output_dir (str): Trained model directory
+
+    Returns:
+    - Trainer: Supervised Fine-Tuning trainer
+    """
+    logger.info(f"Start training model")
 
     peft_config = LoraConfig(
         lora_alpha=lora_alpha,
@@ -102,7 +143,7 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         target_modules=lora_target_modules,
     )
 
-    training_arguments = TrainingArguments(
+    training_arguments = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
@@ -120,7 +161,8 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         group_by_length=group_by_length,
         lr_scheduler_type=lr_scheduler_type,
         report_to=report_to,
-        # max_seq_length=max_seq_length,
+        packing=packing,
+        max_seq_length=max_seq_length,
     )
 
     trainer = SFTTrainer(
@@ -128,70 +170,88 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         args=training_arguments,
         train_dataset=dataset,
         peft_config=peft_config,
-        packing=packing,
         processing_class=tokenizer,
-        max_seq_length=max_seq_length,
     )
 
     # Training
     trainer.train()
 
-    logger.debug("Model trained!")
+    logger.info("✅ Model trained")
 
     return trainer
 
 
-def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
+def save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
+    """
+    Save trained model
 
-    logger.debug(f"Start saving model to {output_dir}/{output_model_name}")
+    Args:
+    - trainer: SFT trainer
+    - tokenizer: Model tokenizer
+    - output_model_name (str): Trained model name
+    - output_dir (str): Trained model directory
+    """
+
+    logger.info(f"Start saving model to {output_dir}")
 
     model_to_save = (
         trainer.model.module if hasattr(trainer.model, "module") else trainer.model
     )  # Take care of distributed/parallel training
-    model_to_save.save_pretrained(output_model_name)
+    model_to_save.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
 
-    torch.cuda.empty_cache()
+    logger.debug(f"Tokenizer vocab size: {len(tokenizer)}")
+    logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
 
-    model = AutoPeftModelForCausalLM.from_pretrained(output_model_name, device_map="auto", torch_dtype=torch.bfloat16)
+    model = AutoPeftModelForCausalLM.from_pretrained(output_dir, device_map=device_map, torch_dtype=torch.bfloat16)
     model = model.merge_and_unload()
 
-    output_merged_dir = os.path.join(output_dir, output_model_name)
+    output_merged_dir = os.path.join(output_dir, MERGED_FOLDER)
     model.save_pretrained(output_merged_dir, safe_serialization=True)
 
     # We also save the tokenizer
     tokenizer.save_pretrained(output_merged_dir)
 
-    # Push to hub if defined
-    if hub:
-        logger.debug(f"Pushing model and tokenizer to {hub}")
-        model.push_to_hub(repo_id=hub)
-        tokenizer.push_to_hub(repo_id=hub)
-
     # Free memory
+    torch.cuda.empty_cache()
     del model
     del tokenizer
     del trainer
 
-    return True
+    logger.info(f"✅ Fine-tuned model {output_model_name} saved")
 
 
-def upload_model(output_dir, output_model_name):
-    logger.debug(f"Start upload {output_model_name} into bucket {BUCKET}")
-    output_merged_dir = os.path.join(output_dir, output_model_name)
+def delete_model(output_model_name: str):
+    """
+    Delete all model files
 
-    # Sync to object storage
-    is_uploaded = aws_service.upload(output_merged_dir, BUCKET, output_model_name, is_directory=True)
-    return is_uploaded
+    Args:
+    - model_dir (str): model folder
+    """
+    model_dir = os.path.join(FOLDER, output_model_name)
+    reset_folder(model_dir, delete=True)
+
+    logger.info(f"✅ Model folder {model_dir} deleted")
 
 
-def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
-    logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
+def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
+    """
+    Fine-tuning pipeline
+
+    Args:
+    - model_name (str): Model to fine-tune
+    - dataset_name (str): Dataset to use for fine-tuning
+    - output_model_name (str): Fine-tuned model name. Default to None
+    - hub (str): huggingface hub to upload to. Default to None
+    """
+
+    logger.info(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Initialize llm folder
-    output_dir = initialize(output_model_name)
+    output_model_name, output_dir = initialize(model_name, output_model_name)
 
     # Load dataset
-    dataset = datasets_service.load(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     # Load the model and the tokenizer
     model, tokenizer = load_pretrained_model(model_name)
@@ -200,9 +260,6 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: s
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
 
     # Save the mode
-    is_saved = save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name, hub=hub)
+    save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name)
 
-    if is_saved:
-        logger.error("Error while saving model.")
-    else:
-        logger.error(f"New model {output_model_name} saved!")
+    return output_model_name

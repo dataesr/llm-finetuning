@@ -1,4 +1,4 @@
-CURRENT_VERSION=$(shell cat app/version.py | cut -d '"' -f 2)
+CURRENT_VERSION=$(shell cat script/version.py | cut -d '"' -f 2)
 IMAGE_NAME=llm-finetuning
 DOCKER_IMAGE_NAME=dataesr/llm-finetuning
 GHCR_IMAGE_NAME=ghcr.io/$(DOCKER_IMAGE_NAME)

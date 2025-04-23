@@ -1,42 +1,37 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu24.04
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
 WORKDIR /
 
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
   curl \
   unzip \
   python3 \
+  python3-dev \
   python3-pip \
   python3-venv \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Install AWS CLI
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
-  unzip awscliv2.zip && \
-  ./aws/install && \
-  rm -rf awscliv2.zip aws/
-
-# Disable python buffering
-ENV PYTHONUNBUFFERED=1
-# Needed for python env (?)
-ENV CUDA_VISIBLE_DEVICES=0
+# Create and set the HOME directory
+WORKDIR /workspace
+ENV HOME=/workspace
+# Give the OVHcloud user (42420:42420) access to this directory
+RUN chown -R 42420:42420 /workspace
 
 # Create python virtual environment
 RUN python3 -m venv venv
 ENV PATH="./venv/bin:$PATH"
 
 # Install PyTorch for cuda 12.6
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
 # Install python packages
-COPY requirements.txt .
+COPY requirements.txt /workspace
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}
 
-# Copy application code
-RUN mkdir /app
-COPY app ./app
+# Add all files to workpspace
+ADD . /workspace
 
-# use ./venv/bin/fastapi if nvidia/cuda:12.6.3-base-ubuntu24.04
-CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0"]
+CMD ["python3", "script/main.py"]
