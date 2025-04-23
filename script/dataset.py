@@ -5,46 +5,52 @@ from logger import get_logger
 
 logger = get_logger(name=__name__)
 
-BUCKET = "llm-datasets"
 FOLDER = "datasets"
 
 
-def initialize(object_name: str):
-    """Initialize datasets folder"""
-    is_folder = os.path.isdir(FOLDER)
+def get_file(object_name: str) -> str:
+    """
+    Get file path from object name
+
+    Args:
+    - object_name (str): ovh object name
+
+    Returns:
+    - file_path: object path
+    """
 
     # Check folder exists
-    if not is_folder:
-        logger.error(f"Folder {FOLDER} not found on storage!")
+    if not os.path.isdir(FOLDER):
+        raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
 
-    # Get file name
-    file_name = f"{FOLDER}/{object_name}"
+    # Get file path
+    file_path = f"{FOLDER}/{object_name}"
 
-    return file_name
+    # Check file exists
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File {file_path} not found on storage!")
+
+    return file_path
 
 
 def get_dataset(object_name: str) -> Dataset:
-    """Get a dataset from storage.
+    """
+    Get a dataset from storage.
 
     Args:
-        object_name (str): S3 object_name
+    - object_name (str): ovh object_name
 
     Returns:
-        DataFrame: dataset
+    - Dataset: dataset
     """
-    # Initialize job
-    file_name = initialize(object_name)
-
-    # Check file exists
-    is_file = os.path.isfile(file_name)
-
-    if not is_file:
-        logger.error(f"File {file_name} not found on storage!")
-        return None
+    # Get file path
+    file_path = get_file(object_name)
 
     # Load as dataset
-    dataset = load_dataset("json", data_files={"train": [file_name]}, split="train")
+    dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
     if dataset:
-        logger.debug(f"Dataset {file_name} loaded!")
+        logger.debug(f"✅ Dataset {object_name} loaded!")
+    else:
+        logger.error(f"Error while loading {file_path}")
 
     return dataset

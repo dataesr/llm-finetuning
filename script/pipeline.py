@@ -1,14 +1,15 @@
 import os
 import torch
-import shutil
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, SFTConfig, setup_chat_format
+from _utils import get_default_output_name, reset_folder
+from hugging import upload_model_to_hub
 from dataset import get_dataset
 from logger import get_logger
 
-BUCKET = "llm-jobs"
 FOLDER = "jobs"
+MERGED_FOLDER = "merged"
 
 logger = get_logger(__name__)
 
@@ -52,26 +53,44 @@ group_by_length = True  # Group together samples of roughly the same length in t
 packing = False  # Pack short exemple to ecrease efficiency
 
 
-def initialize(model_name: str, output_model_name: str) -> str:
-    """Initialize llm folder"""
+def initialize(model_name: str, output_model_name=None) -> tuple:
+    """
+    Initialize llm folder
+
+    Args:
+    - model_name (str): Base model to finetune
+    - output_model_name (str): Finetuned model name. Default to None
+
+    Returns:
+    - output_model_name (str): Finetuned model name
+    - output_dir (str): Finetuned model directory
+    """
     # Default model name
     if not output_model_name:
-        output_model_name = f"{model_name.split("/")[-1]}-finetuned"
+        output_model_name = get_default_output_name(model_name)
 
     if not os.path.isdir(FOLDER):
-        logger.error(f"Folder {FOLDER} not found on storage!")
+        raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
 
     # Reset output folder
     output_dir = f"{FOLDER}/{output_model_name}"
-    if os.path.isdir(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
+    reset_folder(output_dir)
 
     return output_model_name, output_dir
 
 
 def load_pretrained_model(model_name: str):
-    logger.debug(f"Start loading model {model_name}")
+    """
+    Load pretrained model from huggingface
+
+    Args:
+    - model_name (str): Model to load
+
+    Returns:
+    - model: Loaded model
+    - tokenizer: Loaded tokenizer
+    """
+    logger.info(f"Start loading model {model_name}")
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=bnb_load_in_4bit,
@@ -96,13 +115,25 @@ def load_pretrained_model(model_name: str):
 
     torch.cuda.empty_cache()
 
-    logger.debug(f"Model and tokenizer loaded!")
+    logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
 
 
 def train_model(model, tokenizer, dataset, output_dir: str):
-    logger.debug(f"Start training model")
+    """
+    Train model with custom dataset
+
+    Args:
+    - model: Model to be trained
+    - tokenizer: Model tokenizer
+    - dataset: Dataset to use for training
+    - output_dir (str): Trained model directory
+
+    Returns:
+    - Trainer: Supervised Fine-Tuning trainer
+    """
+    logger.info(f"Start training model")
 
     peft_config = LoraConfig(
         lora_alpha=lora_alpha,
@@ -145,38 +176,47 @@ def train_model(model, tokenizer, dataset, output_dir: str):
     # Training
     trainer.train()
 
-    logger.debug("Model trained!")
+    logger.info("✅ Model trained")
 
     return trainer
 
 
-def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
+def save_model(trainer, tokenizer, output_model_name: str, output_dir: str, hf_hub=None, hf_hub_private=False):
+    """
+    Save trained model
 
-    logger.debug(f"Start saving model to {output_dir}")
+    Args:
+    - trainer: SFT trainer
+    - tokenizer: Model tokenizer
+    - output_model_name (str): Trained model name
+    - output_dir (str): Trained model directory
+    - hf_hub (str): Hugging face hub to upload to. Default to None
+    - hf_hub_private (bool): Make hugging face hub private if True, public is False
+    """
+
+    logger.info(f"Start saving model to {output_dir}")
 
     model_to_save = (
         trainer.model.module if hasattr(trainer.model, "module") else trainer.model
     )  # Take care of distributed/parallel training
     model_to_save.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
-    
-    logger.debug("Tokenizer vocab size:", len(tokenizer))
-    logger.debug("Model embeddings size:", model_to_save.get_input_embeddings().weight.shape)
+
+    logger.debug(f"Tokenizer vocab size: {len(tokenizer)}")
+    logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
 
     model = AutoPeftModelForCausalLM.from_pretrained(output_dir, device_map=device_map, torch_dtype=torch.bfloat16)
     model = model.merge_and_unload()
 
-    output_merged_dir = os.path.join(output_dir, output_model_name)
+    output_merged_dir = os.path.join(output_dir, MERGED_FOLDER)
     model.save_pretrained(output_merged_dir, safe_serialization=True)
 
     # We also save the tokenizer
     tokenizer.save_pretrained(output_merged_dir)
 
     # Push to hub if defined
-    if hub:
-        logger.debug(f"Pushing model and tokenizer to huggingface hub {hub}")
-        model.push_to_hub(repo_id=hub)
-        tokenizer.push_to_hub(repo_id=hub)
+    if hf_hub:
+        upload_model_to_hub(output_merged_dir, repo_id=hf_hub, private=hf_hub_private)
 
     # Free memory
     torch.cuda.empty_cache()
@@ -184,11 +224,34 @@ def save_model(trainer, tokenizer, output_model_name, output_dir, hub):
     del tokenizer
     del trainer
 
-    return True
+    logger.info(f"✅ Fine-tuned model {output_model_name} saved")
 
 
-def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: str):
-    logger.debug(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
+def delete_model(output_model_name: str):
+    """
+    Delete all model files
+
+    Args:
+    - model_dir (str): model folder
+    """
+    model_dir = os.path.join(FOLDER, output_model_name)
+    reset_folder(model_dir, delete=True)
+
+    logger.info(f"✅ Model folder {model_dir} deleted")
+
+
+def fine_tune(model_name: str, dataset_name: str, output_model_name=None, hf_hub=None, hf_hub_private=False):
+    """
+    Fine-tuning pipeline
+
+    Args:
+    - model_name (str): Model to fine-tune
+    - dataset_name (str): Dataset to use for fine-tuning
+    - output_model_name (str): Fine-tuned model name. Default to None
+    - hub (str): huggingface hub to upload to. Default to None
+    """
+
+    logger.info(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Initialize llm folder
     output_model_name, output_dir = initialize(model_name, output_model_name)
@@ -203,9 +266,11 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str, hub: s
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
 
     # Save the mode
-    is_saved = save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name, hub=hub)
-
-    if is_saved:
-        logger.error("Error while saving model.")
-    else:
-        logger.error(f"New model {output_model_name} saved!")
+    save_model(
+        trainer,
+        tokenizer,
+        output_dir=output_dir,
+        output_model_name=output_model_name,
+        hf_hub=hf_hub,
+        hf_hub_private=hf_hub_private,
+    )
