@@ -181,7 +181,7 @@ def train_model(model, tokenizer, dataset, output_dir: str):
     return trainer
 
 
-def save_model(trainer, tokenizer, output_model_name: str, output_dir: str, hf_hub=None, hf_hub_private=False):
+def save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
     """
     Save trained model
 
@@ -190,8 +190,6 @@ def save_model(trainer, tokenizer, output_model_name: str, output_dir: str, hf_h
     - tokenizer: Model tokenizer
     - output_model_name (str): Trained model name
     - output_dir (str): Trained model directory
-    - hf_hub (str): Hugging face hub to upload to. Default to None
-    - hf_hub_private (bool): Make hugging face hub private if True, public is False
     """
 
     logger.info(f"Start saving model to {output_dir}")
@@ -213,10 +211,6 @@ def save_model(trainer, tokenizer, output_model_name: str, output_dir: str, hf_h
 
     # We also save the tokenizer
     tokenizer.save_pretrained(output_merged_dir)
-
-    # Push to hub if defined
-    if hf_hub:
-        upload_model_to_hub(output_merged_dir, repo_id=hf_hub, private=hf_hub_private)
 
     # Free memory
     torch.cuda.empty_cache()
@@ -240,7 +234,7 @@ def delete_model(output_model_name: str):
     logger.info(f"✅ Model folder {model_dir} deleted")
 
 
-def fine_tune(model_name: str, dataset_name: str, output_model_name=None, hf_hub=None, hf_hub_private=False):
+def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
     """
     Fine-tuning pipeline
 
@@ -266,11 +260,6 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name=None, hf_hub
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
 
     # Save the mode
-    save_model(
-        trainer,
-        tokenizer,
-        output_dir=output_dir,
-        output_model_name=output_model_name,
-        hf_hub=hf_hub,
-        hf_hub_private=hf_hub_private,
-    )
+    save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name)
+
+    return output_model_name

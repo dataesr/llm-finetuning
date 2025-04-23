@@ -1,6 +1,5 @@
 import os
 from logger import get_logger
-from pipeline import FOLDER, MERGED_FOLDER
 from huggingface_hub import create_repo, upload_folder
 
 logger = get_logger(__name__)
@@ -16,7 +15,9 @@ def get_model(output_model_name: str) -> str:
     Returns:
     - model_dir (str): Fine-tuned model path
     """
-    model_dir = os.path.join(FOLDER, MERGED_FOLDER, output_model_name)
+    from pipeline import FOLDER, MERGED_FOLDER
+
+    model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
 
     if not os.path.isdir(model_dir):
         raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
@@ -30,7 +31,7 @@ def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
 
     Args:
     - model_dir (str): Path to the saved model folder (should include config.json, pytorch_model.bin, tokenizer, etc.)
-    - repo_id (str): The model repo ID on Hugging Face (e.g. "your-username/model-name")
+    - repo_id (str): The model repo ID on Hugging Face
     - private (bool): If True, creates a private repo
     """
 
@@ -53,7 +54,7 @@ def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
         repo_id=repo_id,
         token=token,
     )
-    logger.debug(f"commit_info = {repo_url}")
+    logger.debug(f"commit_info = {commit_info}")
 
     logger.info(f"✅ Model uploaded to https://huggingface.co/{repo_id}")
 
@@ -62,7 +63,7 @@ def push_to_hub(output_model_name: str, repo_id: str, private=False):
     """Push a model from storage to hugging face hub
 
     Args:
-    - model_dir (str): Path to the saved model folder (should include config.json, pytorch_model.bin, tokenizer, etc.)
+    - output_model_name (str): Name of the model to push
     - repo_id (str): The model repo ID on Hugging Face (e.g. "your-username/model-name")
     - private (bool): If True, creates a private repo
     """

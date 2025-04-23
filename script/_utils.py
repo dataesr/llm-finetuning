@@ -1,5 +1,8 @@
 import os
 import shutil
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 def get_default_output_name(model_name: str) -> str:
     """
@@ -25,6 +28,8 @@ def reset_folder(dir_path: str, delete=False):
 
     if os.path.isdir(dir_path):
         shutil.rmtree(dir_path)
+    else: 
+        logger.error(f"Folder {dir_path} not found on storage!")
     
     if not delete:
         os.makedirs(dir_path)

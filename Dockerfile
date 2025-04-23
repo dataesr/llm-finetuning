@@ -18,10 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create and set the HOME directory
 WORKDIR /workspace
 ENV HOME=/workspace
-
-# Add our job's file to this directory
-ADD . /workspace
-
 # Give the OVHcloud user (42420:42420) access to this directory
 RUN chown -R 42420:42420 /workspace
 
@@ -32,6 +28,10 @@ ENV PATH="./venv/bin:$PATH"
 # Install PyTorch for cuda 12.6
 RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
 # Install python packages
+COPY requirements.txt /workspace
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}
+
+# Add all files to workpspace
+ADD . /workspace
 
 CMD ["python3", "script/main.py"]
