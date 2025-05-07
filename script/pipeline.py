@@ -2,7 +2,7 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
-from trl import SFTTrainer, SFTConfig, setup_chat_format
+from trl import SFTTrainer, SFTConfig
 from _utils import get_default_output_name, reset_folder
 from hugging import upload_model_to_hub
 from dataset import get_dataset
@@ -109,8 +109,8 @@ def load_pretrained_model(model_name: str):
     tokenizer.pad_token = tokenizer.eos_token
 
     # Set chat template to OAI chatML
-    model, tokenizer = setup_chat_format(model, tokenizer)
-    model.resize_token_embeddings(len(tokenizer))
+    # model, tokenizer = setup_chat_format(model, tokenizer)
+    # model.resize_token_embeddings(len(tokenizer))
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
 
     torch.cuda.empty_cache()
