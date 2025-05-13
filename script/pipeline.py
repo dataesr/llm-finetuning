@@ -189,7 +189,7 @@ def save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
     model_to_save = (
         trainer.model.module if hasattr(trainer.model, "module") else trainer.model
     )  # Take care of distributed/parallel training
-    model_to_save.save_pretrained_merged(output_dir, tokenizer, save_method="merged_16bits", safe_serialization=True)
+    model_to_save.save_pretrained_merged(output_dir, tokenizer, save_method="merged_16bit", safe_serialization=True)
 
     logger.debug(f"Tokenizer vocab size: {len(tokenizer)}")
     logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
