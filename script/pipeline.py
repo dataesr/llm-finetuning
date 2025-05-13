@@ -1,10 +1,8 @@
 import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig, AutoPeftModelForCausalLM
+from unsloth import FastLanguageModel, is_bfloat16_supported
 from trl import SFTTrainer, SFTConfig
 from _utils import get_default_output_name, reset_folder
-from hugging import upload_model_to_hub
 from dataset import get_dataset, TEXT_FIELD
 from logger import get_logger
 
@@ -15,20 +13,16 @@ logger = get_logger(__name__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Unsloth config (https://www.kaggle.com/code/danielhanchen/kaggle-llama-3-1-8b-unsloth-notebook)
+dtype = None  # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
+load_in_4bit = True  # Use 4bit quantization to reduce memory usage. Can be False.
+
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 lora_r = 64  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
 lora_dropout = 0.1  # The dropout probability for Lora layers.
 lora_task_type = "CAUSAL_LM"
-lora_target_modules = ["q_proj", "v_proj"]
-# For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
-
-# BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
-device_map = {"": 0}
-bnb_load_in_4bit = True  # Enable 4-bit quantization
-bnb_4bit_use_double_quant = False  # Do not use nested quantization
-bnb_4bit_compute_dtype = "float16"  # Computational type
-bnb_4bit_quant_type = "nf4"  # Quantization data type
+lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
@@ -43,8 +37,8 @@ optim = "paged_adamw_32bit"  # Use paged adamw optimizer
 logging_steps = 10  # Log every 10 step
 save_steps = 200  # We're going to save the model weights every 200 steps to save our checkpoint
 learning_rate = 3e-4  # The initial learning rate for AdamW optimizer
-fp16 = True  # Use fp16 precision
-bf16 = False  # Do not use bfloat16 precision
+fp16 = not is_bfloat16_supported()  # Use fp16 precision
+bf16 = is_bfloat16_supported()  # Do not use bfloat16 precision
 max_grad_norm = 0.3  # Max gradient norm
 warmup_ratio = 0.03  # Warmup ratio
 lr_scheduler_type = "linear"  # Learning rate scheduler. Better to decrease the learning rate for long training. I prefer linear over to cosine as it is more predictable: easier to restart training if needed.
@@ -92,21 +86,24 @@ def load_pretrained_model(model_name: str):
     """
     logger.info(f"Start loading model {model_name}")
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=bnb_load_in_4bit,
-        bnb_4bit_quant_type=bnb_4bit_quant_type,
-        bnb_4bit_compute_dtype=getattr(torch, bnb_4bit_compute_dtype),
-        bnb_4bit_use_double_quant=bnb_4bit_use_double_quant,
+    # Load model and tokenizer
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_name, max_seq_length=max_seq_length, dtype=dtype, load_in_4bit=load_in_4bit
     )
-    # Load model
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, quantization_config=bnb_config)
-    model.config.use_cache = False
-    model.config.pretraining_tp = 1
 
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.padding_side = "right"  # to prevent warnings
-    tokenizer.pad_token = tokenizer.eos_token
+    # Add LoRa adapters
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=lora_r,
+        target_modules=lora_target_modules,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        bias="none",
+        use_gradient_checkpointing="unsloth",
+        random_state=3407,
+        use_rslora=False,
+        loftq_config=None,
+    )
 
     # Set chat template to OAI chatML
     # model, tokenizer = setup_chat_format(model, tokenizer)
@@ -135,14 +132,6 @@ def train_model(model, tokenizer, dataset, output_dir: str):
     """
     logger.info(f"Start training model")
 
-    peft_config = LoraConfig(
-        lora_alpha=lora_alpha,
-        lora_dropout=lora_dropout,
-        r=lora_r,
-        task_type=lora_task_type,
-        target_modules=lora_target_modules,
-    )
-
     training_arguments = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
@@ -164,20 +153,22 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         packing=packing,
         max_seq_length=max_seq_length,
         dataset_text_field=TEXT_FIELD,
+        dataset_num_proc=2,
     )
 
     trainer = SFTTrainer(
         model=model,
         args=training_arguments,
         train_dataset=dataset,
-        peft_config=peft_config,
         processing_class=tokenizer,
     )
 
     # Training
-    trainer.train()
+    trainer_stats = trainer.train()
 
     logger.info("✅ Model trained")
+    logger.debug(f"{trainer_stats.metrics['train_runtime']} seconds used for training.")
+    logger.debug(f"{round(trainer_stats.metrics['train_runtime']/60, 2)} minutes used for training.")
 
     return trainer
 
@@ -198,24 +189,14 @@ def save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
     model_to_save = (
         trainer.model.module if hasattr(trainer.model, "module") else trainer.model
     )  # Take care of distributed/parallel training
-    model_to_save.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    model_to_save.save_pretrained_merged(output_dir, tokenizer, save_method="merged_16bits", safe_serialization=True)
 
     logger.debug(f"Tokenizer vocab size: {len(tokenizer)}")
     logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
 
-    model = AutoPeftModelForCausalLM.from_pretrained(output_dir, device_map=device_map, torch_dtype=torch.bfloat16)
-    model = model.merge_and_unload()
-
-    output_merged_dir = os.path.join(output_dir, MERGED_FOLDER)
-    model.save_pretrained(output_merged_dir, safe_serialization=True)
-
-    # We also save the tokenizer
-    tokenizer.save_pretrained(output_merged_dir)
-
     # Free memory
     torch.cuda.empty_cache()
-    del model
+    del model_to_save
     del tokenizer
     del trainer
 

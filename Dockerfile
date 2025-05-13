@@ -26,7 +26,7 @@ RUN python3 -m venv venv
 ENV PATH="./venv/bin:$PATH"
 
 # Install PyTorch for cuda 12.6
-RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
+RUN pip install torch torchvision xformers --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
 # Install python packages
 COPY requirements.txt /workspace
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}

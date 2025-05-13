@@ -6,5 +6,5 @@ peft==0.15.1
 tensorboardX==2.6.2.2
 transformers==4.50.2
 trl==0.15.2
-# unsloth==2025.3.19
+unsloth==2025.5.1
 # vllm==0.8.2
