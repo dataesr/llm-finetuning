@@ -5,7 +5,7 @@ from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, SFTConfig
 from _utils import get_default_output_name, reset_folder
 from hugging import upload_model_to_hub
-from dataset import get_dataset
+from dataset import get_dataset, TEXT_FIELD
 from logger import get_logger
 
 FOLDER = "jobs"
@@ -163,6 +163,7 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         report_to=report_to,
         packing=packing,
         max_seq_length=max_seq_length,
+        dataset_text_field=TEXT_FIELD,
     )
 
     trainer = SFTTrainer(
@@ -250,11 +251,11 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
     # Initialize llm folder
     output_model_name, output_dir = initialize(model_name, output_model_name)
 
-    # Load dataset
-    dataset = get_dataset(dataset_name)
-
     # Load the model and the tokenizer
     model, tokenizer = load_pretrained_model(model_name)
+
+    # Load dataset
+    dataset = get_dataset(dataset_name, eos_token=tokenizer.eos_token)
 
     # Train the model
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
