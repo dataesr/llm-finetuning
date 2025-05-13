@@ -62,7 +62,7 @@ def get_dataset(object_name: str, eos_token) -> Dataset:
     # Formatting function
     def formatting_prompts_func(samples):
         instructions = samples["instruction"]
-        inputs = samples["prompt"]
+        inputs = samples["input"]
         outputs = samples["completion"]
         texts = []
         for instruction, input, output in zip(instructions, inputs, outputs):
