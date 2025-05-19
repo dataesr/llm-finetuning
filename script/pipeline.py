@@ -20,32 +20,29 @@ load_in_4bit = True  # Use 4bit quantization to reduce memory usage. Can be Fals
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 lora_r = 64  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
-lora_dropout = 0.1  # The dropout probability for Lora layers.
-lora_task_type = "CAUSAL_LM"
+lora_dropout = 0  # The dropout probability for Lora layers.
 lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
-max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
-# Context window length. Llama can now technically push further, but I find attention is no longer working so well.
+max_steps = -1  # for a full run, and turn off max_steps=-1
 max_seq_length = 8192
 
+# Unsloth params (https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Llama3.2_(1B_and_3B)-Conversational.ipynb)
 num_train_epochs = 1  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
-gradient_checkpointing = True  # Use gradient checkpointing to save memory
-optim = "paged_adamw_32bit"  # Use paged adamw optimizer
+optim = "adamw_8bit"  # Use adamw optimizer
 logging_steps = 10  # Log every 10 step
-save_steps = 200  # We're going to save the model weights every 200 steps to save our checkpoint
-learning_rate = 3e-4  # The initial learning rate for AdamW optimizer
+learning_rate = 2e-4  # The initial learning rate for AdamW optimizer
 fp16 = not is_bfloat16_supported()  # Use fp16 precision
 bf16 = is_bfloat16_supported()  # Do not use bfloat16 precision
-max_grad_norm = 0.3  # Max gradient norm
-warmup_ratio = 0.03  # Warmup ratio
+weight_decay = 0.01
+warmup_steps = 5
 lr_scheduler_type = "linear"  # Learning rate scheduler. Better to decrease the learning rate for long training. I prefer linear over to cosine as it is more predictable: easier to restart training if needed.
-report_to = "tensorboard"  # Report metrics to tensorboard
+report_to = "none"  # Report metrics to something
 group_by_length = True  # Group together samples of roughly the same length in the training dataset (to minimize padding applied and be more efficient)
 packing = False  # Pack short exemple to ecrease efficiency
-
+seed = 1234
 
 def initialize(model_name: str, output_model_name=None) -> tuple:
     """
@@ -100,7 +97,7 @@ def load_pretrained_model(model_name: str):
         lora_dropout=lora_dropout,
         bias="none",
         use_gradient_checkpointing="unsloth",
-        random_state=3407,
+        random_state=seed,
         use_rslora=False,
         loftq_config=None,
     )
@@ -137,16 +134,12 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        gradient_checkpointing=True,
         optim=optim,
-        save_steps=save_steps,
         logging_steps=logging_steps,
         learning_rate=learning_rate,
         fp16=fp16,
         bf16=bf16,
-        max_grad_norm=max_grad_norm,
         max_steps=max_steps,
-        warmup_ratio=warmup_ratio,
         group_by_length=group_by_length,
         lr_scheduler_type=lr_scheduler_type,
         report_to=report_to,
@@ -154,6 +147,9 @@ def train_model(model, tokenizer, dataset, output_dir: str):
         max_seq_length=max_seq_length,
         dataset_text_field=TEXT_FIELD,
         dataset_num_proc=2,
+        weight_decay=weight_decay,
+        warmup_steps=warmup_steps,
+        seed=seed,
     )
 
     trainer = SFTTrainer(
