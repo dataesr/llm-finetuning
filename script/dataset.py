@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from datasets import load_dataset, Dataset
+from unsloth import get_chat_template
 from logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -45,13 +46,14 @@ def get_file(object_name: str) -> str:
     return file_path
 
 
-def get_dataset(object_name: str, eos_token) -> Dataset:
+def get_dataset(object_name: str, tokenizer, use_chatml: bool = False) -> Dataset:
     """
     Get a dataset from storage.
 
     Args:
     - object_name (str): ovh object_name
-    - eos_token: tokenizer end of sentence token
+    - tokenizer: tokenizer
+    - use_chatml (bool): if True, use chatml tokenizer
 
     Returns:
     - Dataset: dataset
@@ -59,20 +61,36 @@ def get_dataset(object_name: str, eos_token) -> Dataset:
     # Get file path
     file_path = get_file(object_name)
 
-    # Formatting function
-    def formatting_prompts_func(samples):
-        instructions = samples["instruction"]
-        inputs = samples["input"]
-        outputs = samples["completion"]
-        texts = []
-        for instruction, input, output in zip(instructions, inputs, outputs):
-            text = alpaca_prompt.format(instruction, input, output) + eos_token
-            texts.append(text)
-        return {
-            TEXT_FIELD: texts,
-        }
+    if use_chatml:
+        tokenizer = get_chat_template(tokenizer, chat_template="chatml", map_eos_token=True)
 
-    pass
+        # Formatting function
+        def formatting_prompts_func(samples):
+            conversations = samples["chat_ml_format"]
+            texts = [
+                tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=False) for conv in conversations
+            ]
+            return {
+                "text": texts,
+            }
+
+        pass
+
+    else:
+        # Formatting function
+        def formatting_prompts_func(samples):
+            instructions = samples["instruction"]
+            inputs = samples["input"]
+            outputs = samples["completion"]
+            texts = []
+            for instruction, input, output in zip(instructions, inputs, outputs):
+                text = alpaca_prompt.format(instruction, input, output) + tokenizer.eos_token
+                texts.append(text)
+                return {
+                    TEXT_FIELD: texts,
+                }
+
+        pass
 
     # Load as dataset
     dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
@@ -83,7 +101,7 @@ def get_dataset(object_name: str, eos_token) -> Dataset:
     if dataset:
         logger.debug(f"✅ Dataset {object_name} loaded!")
         logger.debug(f"Dataset schema: {dataset.features}")
-        logger.debug(f"Dataset sample: {dataset[0]}")
+        logger.debug(f"Dataset sample: {dataset[0][TEXT_FIELD]}")
     else:
         logger.error(f"Error while loading {file_path}")
 
