@@ -22,6 +22,6 @@ def get_args():
     parser.add_argument("--output_model_name", type=str, default=None, help="Fine-tuned model name")
     parser.add_argument("--hf_hub", type=str, default=None, help="Push the model to a Huggin Face Hub")
     parser.add_argument("--hf_hub_private", action="store_true", help="If set, the hugging face hub will be private")
-    # parser.add_argument("--delete-after", action="store_true", help="If set, delete model files after push")
+    parser.add_argument("--use_chatml", action="store_true", help="If set, use chatml tokenizer")
 
     return parser.parse_args()

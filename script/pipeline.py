@@ -235,7 +235,7 @@ def delete_model(output_model_name: str):
     logger.info(f"✅ Model folder {model_dir} deleted")
 
 
-def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
+def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None, use_chatml: bool = False):
     """
     Fine-tuning pipeline
 
@@ -243,7 +243,7 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
     - model_name (str): Model to fine-tune
     - dataset_name (str): Dataset to use for fine-tuning
     - output_model_name (str): Fine-tuned model name. Default to None
-    - hub (str): huggingface hub to upload to. Default to None
+    - use_chatml (bool): if True, use chatml tokenizer
     """
 
     logger.info(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
@@ -255,7 +255,7 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name=None):
     model, tokenizer = load_pretrained_model(model_name)
 
     # Load dataset
-    dataset = get_dataset(dataset_name, eos_token=tokenizer.eos_token)
+    dataset = get_dataset(dataset_name, tokenizer=tokenizer, use_chatml=use_chatml)
 
     # Train the model
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)

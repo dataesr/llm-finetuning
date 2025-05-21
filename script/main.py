@@ -19,7 +19,7 @@ def main():
     if args.mode == "train":
         logger.debug(f"Start fine-tuning script with args {args}")
 
-        output_model_name = fine_tune(args.model_name, args.dataset_name, args.output_model_name)
+        output_model_name = fine_tune(args.model_name, args.dataset_name, args.output_model_name, args.use_chatml)
 
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
