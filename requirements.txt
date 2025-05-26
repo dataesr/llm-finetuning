@@ -1,11 +1,11 @@
 bitsandbytes==0.45.4
 datasets==3.5.0
-huggingface-hub==0.29.3
+huggingface-hub==0.31.4
 pandas==2.2.3
 peft==0.15.1
 sentencepiece==0.2.0
 tensorboardX==2.6.2.2
-transformers==4.50.2
+transformers==4.52.2
 trl==0.15.2
 # unsloth==2025.3.19
 # vllm==0.8.2

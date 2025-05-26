@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 from datasets import load_dataset, Dataset
-from unsloth import get_chat_template
 from logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -62,8 +61,6 @@ def get_dataset(object_name: str, tokenizer, use_chatml: bool = False) -> Datase
     file_path = get_file(object_name)
 
     if use_chatml:
-        tokenizer = get_chat_template(tokenizer, chat_template="chatml", map_eos_token=True)
-
         # Formatting function
         def formatting_prompts_func(samples):
             conversations = samples["chat_ml_format"]
