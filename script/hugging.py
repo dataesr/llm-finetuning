@@ -1,5 +1,5 @@
 import os
-from logger import get_logger
+from script.logger import get_logger
 from huggingface_hub import create_repo, upload_folder
 
 logger = get_logger(__name__)

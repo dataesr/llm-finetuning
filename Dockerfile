@@ -34,4 +34,5 @@ RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_
 # Add all files to workpspace
 ADD . /workspace
 
-CMD ["python3", "script/main.py"]
+# CMD ["python3", "script/main.py"]
+CMD ["uvicorn", "script.main:app", "--host", "0.0.0.0", "--port", "80"]

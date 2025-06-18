@@ -3,10 +3,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, SFTConfig
-from _utils import get_default_output_name, reset_folder
-from hugging import upload_model_to_hub
-from dataset import get_dataset, TEXT_FIELD
-from logger import get_logger
+from script._utils import get_default_output_name, reset_folder
+from script.dataset import get_dataset, TEXT_FIELD
+from script.logger import get_logger
 
 FOLDER = "jobs"
 MERGED_FOLDER = "merged"
@@ -107,6 +106,7 @@ def load_pretrained_model(model_name: str):
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
     tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.pad_token_id
 
     # Set chat template to OAI chatML
     # model, tokenizer = setup_chat_format(model, tokenizer)
@@ -264,3 +264,35 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None,
     save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name)
 
     return output_model_name
+
+
+def predict(model, tokenizer, input: str | object, use_chatml: bool) -> str:
+    """
+    Generate model prediction
+
+    Args:
+        model: LLM model
+        tokenizer: LLM tokenizer
+        input (str | object): input plain text or chatml object
+        use_chatml (bool): use chat ml format
+
+    Returns:
+        prediction (str): generated prediction
+    """
+    logger.info(f"Start predict with input={input}")
+
+    model.to(device)
+
+    # Get input as text
+    input_text = tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True) if use_chatml else input
+
+    # Get tensors
+    input_tensors = tokenizer(input_text, padding=True, return_attention_mask=True, return_tesnros="pt").to(model.device)
+
+    # Get outputs
+    outputs = model.generate(**input_tensors, max_new_tokens=1024, eos_token_id=tokenizer.eos_token_id)
+
+    # Decode outputs
+    prediction = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+
+    return prediction

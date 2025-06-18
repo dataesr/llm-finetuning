@@ -3,10 +3,10 @@
 # Description : Fine-tuning script for @dataesr
 """
 
-from args import get_args
-from hugging import push_to_hub
-from pipeline import fine_tune, delete_model
-from logger import get_logger
+from script.args import get_args
+from script.hugging import push_to_hub
+from script.pipeline import fine_tune, delete_model
+from script.logger import get_logger
 
 logger = get_logger(__name__)
 
