@@ -57,8 +57,6 @@ def get_dataset(object_name: str, tokenizer, use_chatml: bool = False) -> Datase
     Returns:
     - Dataset: dataset
     """
-    # Get file path
-    file_path = get_file(object_name)
 
     if use_chatml:
         # Formatting function
@@ -89,8 +87,18 @@ def get_dataset(object_name: str, tokenizer, use_chatml: bool = False) -> Datase
 
         pass
 
-    # Load as dataset
-    dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
+    # Try to load from Hugging Face Hub
+    try:
+        logger.debug(f"Trying to load {object_name} from Hugging Face...")
+        dataset = load_dataset(object_name, split="train")
+    except Exception as error:
+        logger.debug(f"Trying to load from storage...")
+
+        # Get file path
+        file_path = get_file(object_name)
+
+        # Load as dataset
+        dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
 
     # Format dataset
     dataset = dataset.map(formatting_prompts_func, batched=True)
