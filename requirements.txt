@@ -1,6 +1,6 @@
 bitsandbytes==0.45.4
 datasets==3.5.0
-fastapi==0.115.13
+fastapi[standard]==0.115.13
 huggingface-hub==0.31.4
 pandas==2.2.3
 peft==0.15.1

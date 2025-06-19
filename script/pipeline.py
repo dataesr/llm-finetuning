@@ -104,6 +104,10 @@ def load_pretrained_model(model_name: str):
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+    if not tokenizer:
+        # Use fast if tokenizer not correctyl loaded
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
     tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.pad_token_id
@@ -266,7 +270,7 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None,
     return output_model_name
 
 
-def predict(model, tokenizer, input: str | object, use_chatml: bool) -> str:
+def model_predict(model, tokenizer, input: str | object, use_chatml: bool) -> str:
     """
     Generate model prediction
 
@@ -287,7 +291,7 @@ def predict(model, tokenizer, input: str | object, use_chatml: bool) -> str:
     input_text = tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True) if use_chatml else input
 
     # Get tensors
-    input_tensors = tokenizer(input_text, padding=True, return_attention_mask=True, return_tesnros="pt").to(model.device)
+    input_tensors = tokenizer(input_text, padding=True, return_attention_mask=True, return_tensors="pt").to(model.device)
 
     # Get outputs
     outputs = model.generate(**input_tensors, max_new_tokens=1024, eos_token_id=tokenizer.eos_token_id)
