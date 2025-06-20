@@ -3,6 +3,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, SFTConfig
+from vllm import LLM, SamplingParams
 from script._utils import get_default_output_name, reset_folder
 from script.dataset import get_dataset, TEXT_FIELD
 from script.logger import get_logger
@@ -91,25 +92,26 @@ def load_pretrained_model(model_name: str):
     """
     logger.info(f"Start loading model {model_name}")
 
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+    if not tokenizer:
+        # Use fast if tokenizer not correctly loaded
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    tokenizer.padding_side = "right"  # to prevent warnings
+    tokenizer.pad_token = tokenizer.eos_token
+
+    # Load model
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=bnb_load_in_4bit,
         bnb_4bit_quant_type=bnb_4bit_quant_type,
         bnb_4bit_compute_dtype=getattr(torch, bnb_4bit_compute_dtype),
         bnb_4bit_use_double_quant=bnb_4bit_use_double_quant,
     )
-    # Load model
+
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, quantization_config=bnb_config)
     model.config.use_cache = False
     model.config.pretraining_tp = 1
-
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-    if not tokenizer:
-        # Use fast if tokenizer not correctyl loaded
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    tokenizer.padding_side = "right"  # to prevent warnings
-    tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.pad_token_id
 
     # Set chat template to OAI chatML
@@ -122,6 +124,36 @@ def load_pretrained_model(model_name: str):
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
+
+
+def load_vllm_engine(model_name: str):
+    """
+    Load vllm engine and tokenizer
+
+    Args:
+        model_name (str): Model to load
+
+    Returns:
+    - vllm_engine: vllm engine
+    - tokenizer: tokenizer
+    """
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+    if not tokenizer:
+        # Use fast if tokenizer not correctly loaded
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    # Load vllm engine
+    vllm_engine = LLM(
+        model=model_name,
+        quantization="bitsandbytes",
+        dtype="half",
+        tensor_parallel_size=torch.cuda.device_count(),
+        trust_remote_code=True,
+    )
+
+    return vllm_engine, tokenizer
 
 
 def train_model(model, tokenizer, dataset, output_dir: str):
@@ -270,12 +302,12 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None,
     return output_model_name
 
 
-def model_predict(model, tokenizer, input: str | object, use_chatml: bool) -> str:
+def model_predict(engine, tokenizer, inputs: list[str | object], use_chatml: bool) -> str:
     """
     Generate model prediction
 
     Args:
-        model: LLM model
+        engine: vllm engine
         tokenizer: LLM tokenizer
         input (str | object): input plain text or chatml object
         use_chatml (bool): use chat ml format
@@ -283,20 +315,20 @@ def model_predict(model, tokenizer, input: str | object, use_chatml: bool) -> st
     Returns:
         prediction (str): generated prediction
     """
-    logger.info(f"Start predict with input={input}")
+    logger.info(f"Start generating with vLLM, n_inputs={len(inputs)}, use_chatml={use_chatml}")
 
-    model.to(device)
+    # Formats inputs
+    prompts = [
+        tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True) if use_chatml else input
+        for input in inputs
+    ]
 
-    # Get input as text
-    input_text = tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True) if use_chatml else input
+    # Generate with vLLM
+    results = engine.generate(
+        prompts, sampling_params=SamplingParams(seed=0, skip_special_tokens=True, max_tokens=1024, temperature=0)
+    )
 
-    # Get tensors
-    input_tensors = tokenizer(input_text, padding=True, return_attention_mask=True, return_tensors="pt").to(model.device)
+    # Extract generated text
+    predictions = [res.outputs[0].text for res in results]
 
-    # Get outputs
-    outputs = model.generate(**input_tensors, max_new_tokens=1024, eos_token_id=tokenizer.eos_token_id)
-
-    # Decode outputs
-    prediction = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
-
-    return prediction
+    return predictions
