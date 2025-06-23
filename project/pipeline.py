@@ -266,9 +266,12 @@ def delete_model(output_model_name: str):
     - model_dir (str): model folder
     """
     model_dir = os.path.join(FOLDER, output_model_name)
-    reset_folder(model_dir, delete=True)
 
-    logger.info(f"✅ Model folder {model_dir} deleted")
+    try:
+        reset_folder(model_dir, delete=True)
+        logger.info(f"✅ Model folder {model_dir} deleted")
+    except Exception as error:
+        logger.debug(f"Cannot delete folder {model_dir}: {error}")
 
 
 def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None, use_chatml: bool = False):
