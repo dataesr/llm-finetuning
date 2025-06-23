@@ -34,5 +34,5 @@ RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_
 # Add all files to workpspace
 ADD . /workspace
 
-# CMD ["python3", "script/main.py"]
-CMD ["fastapi", "run", "script/app.py", "--host", "0.0.0.0"]
+# CMD ["python3", "train.py"]
+CMD ["fastapi", "run", "project/app.py", "--host", "0.0.0.0"]

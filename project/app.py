@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from pydantic import BaseModel
-from script.pipeline import load_vllm_engine, model_predict
+from project.pipeline import load_vllm_engine, model_predict
 
 # Create API
 app = FastAPI()
