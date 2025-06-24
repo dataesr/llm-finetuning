@@ -5,7 +5,7 @@ from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTTrainer, SFTConfig
 from vllm import LLM, SamplingParams
 from project._utils import get_default_output_name, reset_folder
-from project.dataset import get_dataset, TEXT_FIELD
+from project.dataset import get_dataset, save_dataset_instruction, TEXT_FIELD
 from project.logger import get_logger
 
 FOLDER = "jobs"
@@ -155,7 +155,6 @@ def load_vllm_engine(model_name: str):
 
     return vllm_engine, tokenizer
 
-
 def train_model(model, tokenizer, dataset, output_dir: str):
     """
     Train model with custom dataset
@@ -299,13 +298,16 @@ def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None,
     # Train the model
     trainer = train_model(model, tokenizer, dataset=dataset, output_dir=output_dir)
 
-    # Save the mode
+    # Save the model
     save_model(trainer, tokenizer, output_dir=output_dir, output_model_name=output_model_name)
+
+    # Save the instruction
+    save_dataset_instruction(dataset, output_dir=output_dir)
 
     return output_model_name
 
 
-def model_predict(engine, tokenizer, inputs: list[str | object], use_chatml: bool) -> str:
+def model_predict(engine, tokenizer, inputs: list[str | object], use_chatml: bool) -> list[str]:
     """
     Generate model prediction
 

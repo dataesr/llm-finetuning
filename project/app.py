@@ -11,7 +11,7 @@ vllm_engine, tokenizer = load_vllm_engine(model_name=os.getenv("MODEL_NAME"))
 
 # Input schema
 class Input(BaseModel):
-    messages: str | object
+    messages: list[str | object]
     use_chatml: bool = False
 
 

@@ -8,6 +8,9 @@ logger = get_logger(name=__name__)
 FOLDER = "datasets"
 
 TEXT_FIELD = "text"
+INSTRUCTION_FIELD = "instruction"
+INSTRUCTION_FILENAME = "instruction.txt"
+
 alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
@@ -106,8 +109,31 @@ def get_dataset(object_name: str, tokenizer, use_chatml: bool = False) -> Datase
     if dataset:
         logger.debug(f"✅ Dataset {object_name} loaded!")
         logger.debug(f"Dataset schema: {dataset.features}")
+        logger.debug(f"Dataset size: {len(dataset)}")
         logger.debug(f"Dataset sample: {dataset[0][TEXT_FIELD]}")
     else:
         logger.error(f"Error while loading {file_path}")
 
     return dataset
+
+
+def save_dataset_instruction(dataset, output_dir: str):
+    """
+    Save dataset instruction as file in model folder
+
+    Args:
+        dataset: Dataset used for fine tuning
+        output_dir (str): Fine tuned model directory
+    """
+    from project.pipeline import MERGED_FOLDER
+
+    output_merged_dir = os.path.join(output_dir, MERGED_FOLDER)
+
+    # Get instruction from dataset
+    instruction = dataset[0][INSTRUCTION_FIELD]
+
+    # Save in model folder
+    with open(f"{output_merged_dir}/{INSTRUCTION_FILENAME}", "w") as file:
+        file.write(instruction)
+
+    logger.debug(f"✅ Instruction from dataset saved in {output_merged_dir}")
