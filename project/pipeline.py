@@ -153,6 +153,8 @@ def load_vllm_engine(model_name: str):
         trust_remote_code=True,
     )
 
+    logger.info(f"✅ vllm engine and tokenizer loaded")
+
     return vllm_engine, tokenizer
 
 def train_model(model, tokenizer, dataset, output_dir: str):

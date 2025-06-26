@@ -6,7 +6,7 @@
 
 # llm-finetuning script
 
-`ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-jobs@1azgra:/workspace/jobs:rw --env HF_TOKEN=<huggingface_token> ghcr.io/dataesr/llm-finetuning:latest -- ./venv/bin/python3 script/main.py  --mode ["train", "push", "delete"] --model_name <huggingface_model_name> --dataset_name <dataset_name_from_object_storage> --output_model_name <name_of_finetuned_model> --hf_hub <huggingface_hub_id> --hf_hub_private`
+`ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-jobs@1azgra:/workspace/jobs:rwd --env HF_TOKEN=<huggingface_token> ghcr.io/dataesr/llm-finetuning:latest -- ./venv/bin/python3 train.py  --mode ["train", "push", "delete"] --model_name <huggingface_model_name> --dataset_name <dataset_name_from_object_storage> --output_model_name <name_of_finetuned_model> --hf_hub <huggingface_hub_id> --hf_hub_private`
 
 examples:
 - Simple Fine-Tuning
