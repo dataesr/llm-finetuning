@@ -3,13 +3,13 @@ import sys
 import json
 from typing import Union, Literal
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from project.pipeline import load_vllm_engine, model_predict
 
 # Create API
-app = FastAPI()
+app = FastAPI(default_response_class=ORJSONResponse)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Load model and tokenizer
@@ -36,6 +36,6 @@ async def root():
 @app.post("/predict")
 async def predict(input: Input):
     prediction = model_predict(engine=vllm_engine, tokenizer=tokenizer, inputs=input.messages, use_chatml=input.use_chatml)
-    payload = json.dumps({"prediction": prediction})
-    print(f"/predict response size: {sys.getsizeof(payload) / 1024:.2f} KB")
-    return JSONResponse(content=json.loads(payload))
+    response = {"prediction": prediction}
+    print(f"/predict response size: {sys.getsizeof(response) / 1024:.2f} KB")
+    return response
