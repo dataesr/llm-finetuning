@@ -35,4 +35,4 @@ RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_
 ADD . /workspace
 
 # CMD ["python3", "train.py"]
-CMD ["fastapi", "run", "project/app.py", "--host", "0.0.0.0", "--timeout-keep-alive", "120"]
+CMD ["uvicorn", "project.app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "1200"]
