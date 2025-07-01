@@ -337,7 +337,14 @@ def model_predict(engine, tokenizer, inputs: list[str | object], use_chatml: boo
     results = engine.generate(
         prompts,
         sampling_params=SamplingParams(
-            seed=0, skip_special_tokens=True, stop_token_ids=[tokenizer.eos_token_id], max_tokens=1024, temperature=0
+            seed=0,
+            skip_special_tokens=True,
+            stop_token_ids=[tokenizer.eos_token_id],
+            max_tokens=1024,
+            temperature=0,
+            repetition_penalty=1.1,  # Pénalise les répétitions
+            frequency_penalty=0.5,  # Réduit la fréquence des tokens répétés
+            presence_penalty=0.1,  # Encourage la diversité
         ),
     )
 
