@@ -151,6 +151,9 @@ def load_vllm_engine(model_name: str):
         dtype="half",
         tensor_parallel_size=torch.cuda.device_count(),
         trust_remote_code=True,
+        gpu_memory_utilization=0.8,  # Réduisez à 0.7-0.8
+        enforce_eager=True,  # Évite les optimisations qui peuvent crasher
+        disable_custom_all_reduce=True,  # Plus stable
     )
 
     logger.info(f"✅ vllm engine and tokenizer loaded")
@@ -332,7 +335,10 @@ def model_predict(engine, tokenizer, inputs: list[str | object], use_chatml: boo
 
     # Generate with vLLM
     results = engine.generate(
-        prompts, sampling_params=SamplingParams(seed=0, skip_special_tokens=True, max_tokens=1024, temperature=0)
+        prompts,
+        sampling_params=SamplingParams(
+            seed=0, skip_special_tokens=True, stop_token_ids=[tokenizer.eos_token_id], max_tokens=1024, temperature=0
+        ),
     )
 
     # Extract generated text
