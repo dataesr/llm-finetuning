@@ -23,4 +23,4 @@ examples:
 
 
 - Inference with fine-tuned model
-`ovhai app run --gpu 1 --volume llm-jobs@1azgra/:/workspace/jobs:rw --env HF_TOKEN=hf_abcdef --env MODEL_NAME=dataesr/openchat-3.6-8b-acknowledgments --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-finetuning:latest`
+`ovhai app run --gpu 1 --env HF_TOKEN=hf_abcdef --env MODEL_NAME=dataesr/openchat-3.6-8b-acknowledgments --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-finetuning:latest`
