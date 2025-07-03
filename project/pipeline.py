@@ -126,6 +126,27 @@ def load_pretrained_model(model_name: str):
     return model, tokenizer
 
 
+def load_pretrained_tokenizer(model_name: str):
+    """
+    Load pretrained tokenizer from huggingface
+
+    Args:
+    - model_name (str): Model to load from
+
+    Returns:
+    - tokenizer: Loaded tokenizer
+    """
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+    if not tokenizer:
+        # Use fast if tokenizer not correctly loaded
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    logger.info(f"✅ Tokenizer loaded")
+
+    return tokenizer
+
+
 def load_vllm_engine(model_name: str):
     """
     Load vllm engine and tokenizer
