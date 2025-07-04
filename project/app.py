@@ -16,7 +16,9 @@ from vllm.entrypoints.utils import with_cancellation
 from vllm.utils import random_uuid
 from vllm.version import __version__ as VLLM_VERSION
 from project.pipeline import load_pretrained_tokenizer
+from project.logger import get_logger
 
+logger = get_logger(__name__)
 
 # Create API
 app = FastAPI(default_response_class=ORJSONResponse)
@@ -35,7 +37,7 @@ engine_args = AsyncEngineArgs(
     disable_custom_all_reduce=True,  # Plus stable
 )
 engine = AsyncLLMEngine.from_engine_args(engine_args)
-print(f"✅ VLLM engine (version {VLLM_VERSION}) loaded with args {engine_args}")
+logger.info(f"✅ VLLM engine (version {VLLM_VERSION}) loaded with args {engine_args}")
 
 # Load tokenizer
 tokenizer = load_pretrained_tokenizer(model_name=os.getenv("MODEL_NAME"))
@@ -82,7 +84,7 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
     sampling_params = request_data.sampling_params
 
     assert isinstance(prompts, list)
-    print(f"Start generate n_prompts={len(prompts)}, use_chatml={use_chatml}, use_stream={use_stream}")
+    logger.info(f"Start generate n_prompts={len(prompts)}, use_chatml={use_chatml}, use_stream={use_stream}")
 
     # Format prompts using chat template if needed #TODO: external func ?
     formatted_prompts = [
@@ -102,22 +104,24 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
         "temperature": 0,
         **sampling_params,
     }
-    print(f"SamplingParams={full_sampling_params}")
+    logger.debug(f"SamplingParams={full_sampling_params}")
 
     # Streaming mode (one prompt at a time)
     async def generate_stream() -> AsyncGenerator[bytes, None]:
         yield b'{"completion": ['  # start the array
+        await asyncio.sleep(0)  # Helps flush headers ASAP
         for i, prompt in enumerate(formatted_prompts):
             request_id = random_uuid()
             final_output = None
             async for output in engine.generate(prompt, SamplingParams(**full_sampling_params), request_id):
                 final_output = output
             if final_output and final_output.outputs:
-                print(f"Completion done for request_id={request_id} (index={i})")
+                logger.debug(f"Completion done for request_id={request_id} (index={i})")
                 text = json.dumps(final_output.outputs[0].text)  # ensure proper escaping
                 if i > 0:
                     yield b","  # Add comma before each item except first
                 yield text.encode("utf-8")  # Stream the actual string
+            await asyncio.sleep(0)  # Yield control to event loop
 
         yield b"]}"  # Close array and object
 
@@ -132,11 +136,11 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
             async for output in engine.generate(prompt, SamplingParams(**full_sampling_params), request_id):
                 final_output = output
         except asyncio.CancelledError:
-            print(f"[CANCELLED] Generation was cancelled for request_id={request_id}")
+            logger.debug(f"[CANCELLED] Generation was cancelled for request_id={request_id}")
             return Response(status_code=499)
 
         assert final_output is not None
-        print(f"Completion done for request_id={request_id}")
+        logger.debug(f"Completion done for request_id={request_id}")
         return final_output.outputs[0].text
 
     outputs = []
@@ -144,5 +148,5 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
         text = await generate_one(prompt)
         outputs.append(text)
     results = {"completion": outputs}
-    print(f"/generate response size: {sys.getsizeof(results) / 1024:.2f} KB")
+    logger.debug(f"/generate response size: {sys.getsizeof(results) / 1024:.2f} KB")
     return results
