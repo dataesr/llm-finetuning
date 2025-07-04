@@ -1,51 +1,19 @@
 import os
-import sys
-import json
 import asyncio
 import torch
 from typing import Union, Literal, Dict, Any
-from fastapi import FastAPI, Request
-from fastapi.responses import ORJSONResponse, Response, StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import ORJSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
-from collections.abc import AsyncGenerator
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import AsyncLLMEngine
+from concurrent.futures import ThreadPoolExecutor
+from vllm import LLM
 from vllm.sampling_params import SamplingParams
-from vllm.entrypoints.utils import with_cancellation
-from vllm.utils import random_uuid
 from vllm.version import __version__ as VLLM_VERSION
 from project.pipeline import load_pretrained_tokenizer
 from project.logger import get_logger
 
 logger = get_logger(__name__)
-
-# Create API
-app = FastAPI(default_response_class=ORJSONResponse)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.state.enable_server_load_tracking = False  # <-- Fix crash from vLLM utils
-
-# Load vllm engine
-engine_args = AsyncEngineArgs(
-    model=os.getenv("MODEL_NAME"),
-    quantization="bitsandbytes",
-    dtype="half",
-    tensor_parallel_size=torch.cuda.device_count(),
-    trust_remote_code=True,
-    gpu_memory_utilization=0.8,  # Réduisez à 0.7-0.8
-    # enforce_eager=True,  # Évite les optimisations qui peuvent crasher
-    disable_custom_all_reduce=True,  # Plus stable
-    worker_use_ray=False,  # ✅ Crucial pour éviter les aborts
-    engine_use_ray=False,  # ✅ Désactiver Ray complètement
-    max_num_seqs=1,  # ✅ Une seule séquence à la fois
-    disable_log_stats=False,
-    disable_log_requests=False,
-)
-engine = AsyncLLMEngine.from_engine_args(engine_args)
-logger.info(f"✅ VLLM engine (version {VLLM_VERSION}) loaded with args {engine_args}")
-
-# Load tokenizer
-tokenizer = load_pretrained_tokenizer(model_name=os.getenv("MODEL_NAME"))
 
 
 # Chat message schema
@@ -62,14 +30,38 @@ class RequestData(BaseModel):
     sampling_params: Dict[str, Any] = {}
 
 
+# Create API
+app = FastAPI(default_response_class=ORJSONResponse)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Load vllm engine
+engine = LLM(
+    model=os.getenv("MODEL_NAME"),
+    quantization="bitsandbytes",
+    dtype="half",
+    tensor_parallel_size=torch.cuda.device_count(),
+    trust_remote_code=True,
+    gpu_memory_utilization=0.8,  # Réduisez à 0.7-0.8
+    enforce_eager=True,  # Évite les optimisations qui peuvent crasher
+    disable_custom_all_reduce=True,  # Plus stable
+    disable_log_stats=False,
+)
+logger.info(f"✅ VLLM engine (version {VLLM_VERSION}) loaded!")
+
+# Load tokenizer
+tokenizer = load_pretrained_tokenizer(model_name=os.getenv("MODEL_NAME"))
+
+# Thread pool to avoid blocking
+executor = ThreadPoolExecutor(max_workers=2)
+
 @app.get("/")
 async def root():
     """Home route"""
-    return ORJSONResponse({"message": "LLM inference API"})
+    return {"message": "LLM inference API (sync vLLM)"}
 
 
 @app.post("/generate")
-async def generate(request_data: RequestData, request: Request) -> Response:
+async def generate(request_data: RequestData) -> Response:
     """Generate completion for the request.
 
     The request should be a JSON object with the following fields:
@@ -78,20 +70,29 @@ async def generate(request_data: RequestData, request: Request) -> Response:
     - use_stream: whether to stream the results or not.
     - sampling_params: the sampling parameters.
     """
-    return await _generate(request_data=request_data, raw_request=request)
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            executor,
+            _generate_batch,
+            request_data.prompts,
+            request_data.use_chatml,
+            request_data.sampling_params,
+        )
+        return {"completion": result}
+    except Exception as e:
+        logger.error(f"Generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@with_cancellation
-async def _generate(request_data: RequestData, raw_request: Request) -> Response:
-    prompts = request_data.prompts
-    use_chatml = request_data.use_chatml
-    use_stream = request_data.use_stream
-    sampling_params = request_data.sampling_params
+def _generate_batch(
+    prompts: list[Union[str, list[ChatMessage]]],
+    use_chatml: bool,
+    sampling_params: Dict[str, Any],
+) -> list[str]:
+    logger.info(f"🔄 Running sync generation on {len(prompts)} prompts (chatml={use_chatml})")
 
-    assert isinstance(prompts, list)
-    logger.info(f"Start generate n_prompts={len(prompts)}, use_chatml={use_chatml}, use_stream={use_stream}")
-
-    # Format prompts using chat template if needed #TODO: external func ?
+    # Format prompts
     formatted_prompts = [
         (
             tokenizer.apply_chat_template(p, tokenize=False, add_generation_prompt=True)
@@ -101,56 +102,16 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
         for p in prompts
     ]
 
-    # Setup sampling params
-    full_sampling_params = {
-        "seed": 0,
-        "skip_special_tokens": True,
-        "max_tokens": 1024,
-        "temperature": 0,
+    # Create SamplingParams
+    full_params = SamplingParams(
+        temperature=0,
+        max_tokens=1024,
+        seed=0,
+        skip_special_tokens=True,
         **sampling_params,
-    }
-    logger.debug(f"SamplingParams={full_sampling_params}")
+    )
+    outputs = engine.generate(formatted_prompts, full_params)
+    completions = [output.outputs[0].text for output in outputs]
 
-    # Streaming mode (one prompt at a time)
-    async def generate_stream() -> AsyncGenerator[bytes, None]:
-        yield b'{"completion": ['  # start the array
-        for i, prompt in enumerate(formatted_prompts):
-            request_id = random_uuid()
-            final_output = None
-            async for output in engine.generate(prompt, SamplingParams(**full_sampling_params), request_id):
-                final_output = output
-            if final_output and final_output.outputs:
-                logger.debug(f"Completion done for request_id={request_id} (index={i})")
-                # logger.debug(f"Completion : {final_output.outputs[0].text}")
-                text = json.dumps(final_output.outputs[0].text)  # ensure proper escaping
-                if i > 0:
-                    yield b","  # Add comma before each item except first
-                yield text.encode("utf-8")  # Stream the actual string
-
-        yield b"]}"  # Close array and object
-
-    if use_stream:
-        return StreamingResponse(generate_stream(), media_type="application/json")
-
-    # Non streaming mode (batched prompts)
-    async def generate_one(prompt: str) -> str:
-        request_id = random_uuid()
-        final_output = None
-        try:
-            async for output in engine.generate(prompt, SamplingParams(**full_sampling_params), request_id):
-                final_output = output
-        except asyncio.CancelledError:
-            logger.debug(f"[CANCELLED] Generation was cancelled for request_id={request_id}")
-            return Response(status_code=499)
-
-        assert final_output is not None
-        logger.debug(f"Completion done for request_id={request_id}")
-        return final_output.outputs[0].text
-
-    outputs = []
-    for prompt in formatted_prompts:
-        text = await generate_one(prompt)
-        outputs.append(text)
-    results = {"completion": outputs}
-    logger.debug(f"/generate response size: {sys.getsizeof(results) / 1024:.2f} KB")
-    return results
+    logger.info(f"✅ Completed {len(completions)} prompts.")
+    return completions
