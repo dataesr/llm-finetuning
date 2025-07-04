@@ -35,6 +35,11 @@ engine_args = AsyncEngineArgs(
     gpu_memory_utilization=0.8,  # Réduisez à 0.7-0.8
     # enforce_eager=True,  # Évite les optimisations qui peuvent crasher
     disable_custom_all_reduce=True,  # Plus stable
+    worker_use_ray=False,  # ✅ Crucial pour éviter les aborts
+    engine_use_ray=False,  # ✅ Désactiver Ray complètement
+    max_num_seqs=1,  # ✅ Une seule séquence à la fois
+    disable_log_stats=False,
+    disable_log_requests=False,
 )
 engine = AsyncLLMEngine.from_engine_args(engine_args)
 logger.info(f"✅ VLLM engine (version {VLLM_VERSION}) loaded with args {engine_args}")
@@ -109,7 +114,6 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
     # Streaming mode (one prompt at a time)
     async def generate_stream() -> AsyncGenerator[bytes, None]:
         yield b'{"completion": ['  # start the array
-        await asyncio.sleep(0)  # Helps flush headers ASAP
         for i, prompt in enumerate(formatted_prompts):
             request_id = random_uuid()
             final_output = None
@@ -117,11 +121,11 @@ async def _generate(request_data: RequestData, raw_request: Request) -> Response
                 final_output = output
             if final_output and final_output.outputs:
                 logger.debug(f"Completion done for request_id={request_id} (index={i})")
+                # logger.debug(f"Completion : {final_output.outputs[0].text}")
                 text = json.dumps(final_output.outputs[0].text)  # ensure proper escaping
                 if i > 0:
                     yield b","  # Add comma before each item except first
                 yield text.encode("utf-8")  # Stream the actual string
-            await asyncio.sleep(0)  # Yield control to event loop
 
         yield b"]}"  # Close array and object
 
