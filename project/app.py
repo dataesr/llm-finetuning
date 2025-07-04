@@ -102,15 +102,11 @@ def _generate_batch(
         for p in prompts
     ]
 
-    # Create SamplingParams
-    full_params = SamplingParams(
-        temperature=0,
-        max_tokens=1024,
-        seed=0,
-        skip_special_tokens=True,
-        **sampling_params,
-    )
-    outputs = engine.generate(formatted_prompts, full_params)
+    # Sampling params
+    full_params = {"seed": 0, "temperature": 0, "max_tokens": 1024, "skip_special_tokens": True, **sampling_params}
+
+    # Generate outputs
+    outputs = engine.generate(formatted_prompts, SamplingParams(**full_params))
     completions = [output.outputs[0].text for output in outputs]
 
     logger.info(f"✅ Completed {len(completions)} prompts.")
