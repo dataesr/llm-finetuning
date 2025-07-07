@@ -1,12 +1,14 @@
 import os
 import asyncio
 import torch
-from typing import Union, Literal, Dict, Any
+from uuid import uuid4
+import time
+from typing import Union, Literal, Optional, Dict, Any
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import ORJSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
-from concurrent.futures import ThreadPoolExecutor
 from vllm import LLM
 from vllm.sampling_params import SamplingParams
 from vllm.version import __version__ as VLLM_VERSION
@@ -26,33 +28,104 @@ class ChatMessage(BaseModel):
 class RequestData(BaseModel):
     prompts: list[Union[str, list[ChatMessage]]]
     use_chatml: bool = False
-    use_stream: bool = False
     sampling_params: Dict[str, Any] = {}
 
 
+# Generate task schema
+class Task(BaseModel):
+    status: Literal["queued", "running", "done", "error"]
+    completions: Optional[list[str]] = None
+    error: Optional[str] = None
+    queued_at: float
+    running_at: Optional[float] = None
+    done_at: Optional[float] = None
+
+
+# Generate task store schema
+class TaskStore:
+    def __init__(self):
+        self._store: Dict[str, Task] = {}
+        self._lock = asyncio.Lock()
+
+    async def create(self) -> str:
+        async with self._lock:
+            task_id = str(uuid4())
+            self._store[task_id] = Task(
+                status="queued",
+                queued_at=time.time(),
+            )
+            return task_id
+
+    async def update(self, task_id: str, **kwargs):
+        async with self._lock:
+            task = self._store.get(task_id)
+            if not task:
+                raise KeyError(f"Task {task_id} not found")
+            updated = task.model_copy(update=kwargs)
+            self._store[task_id] = updated
+
+    async def get(self, task_id: str) -> Task:
+        async with self._lock:
+            task = self._store.get(task_id)
+            if not task:
+                raise KeyError(f"Task {task_id} not found")
+            return task
+
+    async def cleanup(self, older_than_secs: int = 600):
+        async with self._lock:
+            now = time.time()
+            expired = [tid for tid, t in self._store.items() if t.done_at and (now - t.done_at) > older_than_secs]
+            for tid in expired:
+                del self._store[tid]
+                logger.info(f"🗑️ Task {tid} expired and removed.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🟧 Initializing application...")
+
+    model_name = os.getenv("MODEL_NAME")
+    assert model_name is not None
+
+    # Initialize vllm engine
+    app.state.engine = LLM(
+        model=model_name,
+        quantization="bitsandbytes",
+        dtype="half",
+        tensor_parallel_size=torch.cuda.device_count(),
+        trust_remote_code=True,
+        enforce_eager=True,
+        disable_custom_all_reduce=True,
+        disable_log_stats=False,
+    )
+    logger.info(f"✅ vLLM engine loaded")
+    app.state.engine_lock = asyncio.Lock()
+
+    # Initialize tokenizer
+    app.state.tokenizer = load_pretrained_tokenizer(model_name=model_name)
+
+    # Initialize task store
+    app.state.task_store = TaskStore()
+
+    # Initialize cleaning function
+    async def cleanup_task_store():
+        while True:
+            await app.state.task_store.cleanup(older_than_secs=600)
+            await asyncio.sleep(60)
+
+    asyncio.create_task(cleanup_task_store())
+    logger.info(f"✅ Task store initialized")
+
+    yield
+
+    # Optional cleanup logic here
+    logger.info("🟥 Shutting down app.")
+
+
 # Create API
-app = FastAPI(default_response_class=ORJSONResponse)
+app = FastAPI(lifespan=lifespan, default_response_class=ORJSONResponse)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Load vllm engine
-engine = LLM(
-    model=os.getenv("MODEL_NAME"),
-    quantization="bitsandbytes",
-    dtype="half",
-    tensor_parallel_size=torch.cuda.device_count(),
-    trust_remote_code=True,
-    gpu_memory_utilization=0.8,  # Réduisez à 0.7-0.8
-    enforce_eager=True,  # Évite les optimisations qui peuvent crasher
-    disable_custom_all_reduce=True,  # Plus stable
-    disable_log_stats=False,
-)
-logger.info(f"✅ VLLM engine (version {VLLM_VERSION}) loaded!")
-
-# Load tokenizer
-tokenizer = load_pretrained_tokenizer(model_name=os.getenv("MODEL_NAME"))
-
-# Thread pool to avoid blocking
-executor = ThreadPoolExecutor(max_workers=2)
 
 @app.get("/")
 async def root():
@@ -60,9 +133,19 @@ async def root():
     return {"message": "LLM inference API (sync vLLM)"}
 
 
+# @app.get("/stream-ping")
+# async def stream_ping():
+#     async def generator():
+#         for i in range(90):
+#             yield f"ping {i}\n".encode()
+#             await asyncio.sleep(1)
+
+#     return StreamingResponse(generator(), media_type="text/plain")
+
+
 @app.post("/generate")
 async def generate(request_data: RequestData) -> Response:
-    """Generate completion for the request.
+    """Create a generation task for the request.
 
     The request should be a JSON object with the following fields:
     - prompts: the list of texts to use for the generation (str or list of chat message).
@@ -70,27 +153,57 @@ async def generate(request_data: RequestData) -> Response:
     - use_stream: whether to stream the results or not.
     - sampling_params: the sampling parameters.
     """
+    task_id = await app.state.task_store.create()
+
+    async def generate_task(task_id: str, request_data: RequestData):
+        try:
+            logger.info(
+                f"➡️ New generation task {task_id} added (prompts={len(request_data.prompts)}, use_chatml={request_data.use_chatml})"
+            )
+            if request_data.sampling_params:
+                logger.debug(f"Generation with custom params: {request_data.sampling_params}")
+
+            async with app.state.engine_lock:
+                await app.state.task_store.update(task_id, status="running", running_at=time.time())
+                completions = await asyncio.to_thread(
+                    _generate,
+                    app.state.engine,
+                    app.state.tokenizer,
+                    request_data.prompts,
+                    request_data.use_chatml,
+                    request_data.sampling_params,
+                )
+            await app.state.task_store.update(task_id, status="done", completions=completions, done_at=time.time())
+            logger.info(f"✅ Generation task {task_id} done.")
+        except Exception as e:
+            await app.state.task_store.update(task_id, status="error", error=str(e))
+            logger.error(f"❌ Generation task {task_id} failed: {e}")
+
+    # Create task
+    asyncio.create_task(generate_task(task_id, request_data))
+
+    # Return task id
+    return {"task_id": task_id, "status": "queued"}
+
+
+# Get task status and completions
+@app.get("/generate/{task_id}")
+async def get_task(task_id: str):
     try:
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            _generate_batch,
-            request_data.prompts,
-            request_data.use_chatml,
-            request_data.sampling_params,
-        )
-        return {"completion": result}
-    except Exception as e:
-        logger.error(f"Generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        task = await app.state.task_store.get(task_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 
-def _generate_batch(
+def _generate(
+    engine: LLM,
+    tokenizer,
     prompts: list[Union[str, list[ChatMessage]]],
     use_chatml: bool,
     sampling_params: Dict[str, Any],
 ) -> list[str]:
-    logger.info(f"🔄 Running sync generation on {len(prompts)} prompts (chatml={use_chatml})")
+    logger.debug(f"Running generation on {len(prompts)} prompts...")
 
     # Format prompts
     formatted_prompts = [
@@ -108,6 +221,6 @@ def _generate_batch(
     # Generate outputs
     outputs = engine.generate(formatted_prompts, SamplingParams(**full_params))
     completions = [output.outputs[0].text for output in outputs]
+    logger.debug(f"Generated {len(completions)} completions")
 
-    logger.info(f"✅ Completed {len(completions)} prompts.")
     return completions
