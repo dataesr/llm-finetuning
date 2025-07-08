@@ -6,8 +6,8 @@ from uuid import uuid4
 import time
 from typing import Union, Literal, Optional, Dict, Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import ORJSONResponse, Response
+from fastapi import FastAPI, HTTPException, status as fastapi_status
+from fastapi.responses import ORJSONResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from vllm import LLM
@@ -20,21 +20,19 @@ logger = get_logger(__name__)
 
 FOLDER = "completions"
 
-# Chat message schema
 class ChatMessage(BaseModel):
+    """Chat message class"""
     role: Literal["system", "user", "assistant"]
     content: str
 
-
-# Generate request schema
 class RequestData(BaseModel):
+    """Generate request inputs"""
     prompts: list[Union[str, list[ChatMessage]]]
     use_chatml: bool = False
     sampling_params: Dict[str, Any] = {}
 
-
-# Generate task schema
 class Task(BaseModel):
+    """Generate task class"""
     status: Literal["queued", "running", "done", "error"]
     completions: Optional[list[str]] = None
     error: Optional[str] = None
@@ -42,15 +40,14 @@ class Task(BaseModel):
     running_at: Optional[float] = None
     done_at: Optional[float] = None
 
-
-# Generate task store schema
 class TaskStore:
+    """Generate task store class"""
 
-    def __init__(self, save_dir: str = None):
+    def __init__(self):
         self._store: Dict[str, Task] = {}
         self._lock = asyncio.Lock()
-        self._save_on_dir = save_dir
-        if save_dir is None or not os.path.isdir(str(save_dir)):
+        self._save_on_dir = FOLDER
+        if not os.path.isdir(FOLDER):
             logger.warning("TaskStore saving directory not found: saving to disk disabled")
             self._save_on_dir = None
 
@@ -83,6 +80,7 @@ class TaskStore:
             file_path = f"{self._save_on_dir}/{task_id}.json"
             with open(file_path, "w", encoding="utf-8") as file:
                 json.dump(completions, file)
+            logger.debug(f"{os.listdir(FOLDER)}")
             logger.debug(f"💾 Task {task_id}  completions saved to {file_path}")
 
     async def get(self, task_id: str) -> Task:
@@ -126,7 +124,7 @@ async def lifespan(app: FastAPI):
     app.state.tokenizer = load_pretrained_tokenizer(model_name=model_name)
 
     # Initialize task store
-    app.state.task_store = TaskStore(save_dir=FOLDER)
+    app.state.task_store = TaskStore()
 
     # Initialize cleaning function
     async def cleanup_task_store():
@@ -144,14 +142,30 @@ async def lifespan(app: FastAPI):
 
 
 # Create API
-app = FastAPI(lifespan=lifespan, default_response_class=ORJSONResponse)
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.get("/")
-async def root():
-    """Home route"""
-    return {"message": "LLM inference API (sync vLLM)"}
+async def root() -> JSONResponse:
+    """Application default route"""
+    return JSONResponse(content={"application": "LLM inference API (sync vLLM)"})
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    """Application health route"""
+    try:
+        if app.state.engine and app.state.tokenizer and app.state.task_store:
+            return JSONResponse(
+                content={"status": "healthy"},
+                status_code=fastapi_status.HTTP_200_OK,
+            )
+    except Exception:
+        return JSONResponse(
+            content={"status": "unhealthy"},
+            status_code=fastapi_status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
 
 # @app.get("/stream-ping")
@@ -165,14 +179,17 @@ async def root():
 
 
 @app.post("/generate")
-async def generate(request_data: RequestData) -> Response:
+async def generate(request_data: RequestData) -> JSONResponse:
     """Create a generation task for the request.
 
     The request should be a JSON object with the following fields:
     - prompts: the list of texts to use for the generation (str or list of chat message).
     - use_chatml: whether to use chatml format for prompts
-    - use_stream: whether to stream the results or not.
     - sampling_params: the sampling parameters.
+
+    It returns a JSON object:
+    - task_id: task unique identifier
+    - status: task current status
     """
     task_id = await app.state.task_store.create()
 
@@ -204,17 +221,33 @@ async def generate(request_data: RequestData) -> Response:
     asyncio.create_task(generate_task(task_id, request_data))
 
     # Return task id
-    return {"task_id": task_id, "status": "queued"}
+    task_data = await app.state.task_store.get(task_id)
+    return JSONResponse({"task_id": task_id, "status": task_data.status})
 
 
 # Get task status and completions
 @app.get("/generate/{task_id}")
-async def get_task(task_id: str):
+async def get_generate_task(task_id: str) -> ORJSONResponse:
+    """
+    Get a generation task data.
+
+    The request route should contains:
+    - task_id: task identifier
+
+    It returns a ORJSON object with the following fields:
+    - task_id: task identifier
+    - status: task status
+    - completions: list of generated completions
+    - error: error message
+    - queued_at: task creation time
+    - running_at: task started time
+    - done_at: task done time
+    """
     try:
         task = await app.state.task_store.get(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return task
+    return ORJSONResponse(content=task.model_dump())
 
 
 def _generate(
