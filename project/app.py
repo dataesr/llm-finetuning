@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import torch
 from uuid import uuid4
@@ -17,6 +18,7 @@ from project.logger import get_logger
 
 logger = get_logger(__name__)
 
+FOLDER = "completions"
 
 # Chat message schema
 class ChatMessage(BaseModel):
@@ -43,9 +45,22 @@ class Task(BaseModel):
 
 # Generate task store schema
 class TaskStore:
-    def __init__(self):
+
+    def __init__(self, save_dir: str = None):
         self._store: Dict[str, Task] = {}
         self._lock = asyncio.Lock()
+        self._save_on_dir = save_dir
+        if save_dir is None or not os.path.isdir(str(save_dir)):
+            logger.warning("TaskStore saving directory not found: saving to disk disabled")
+            self._save_on_dir = None
+
+    async def _update(self, task_id: str, **kwargs):
+        async with self._lock:
+            task = self._store.get(task_id)
+            if not task:
+                raise KeyError(f"Task {task_id} not found")
+            updated = task.model_copy(update=kwargs)
+            self._store[task_id] = updated
 
     async def create(self) -> str:
         async with self._lock:
@@ -56,13 +71,19 @@ class TaskStore:
             )
             return task_id
 
-    async def update(self, task_id: str, **kwargs):
-        async with self._lock:
-            task = self._store.get(task_id)
-            if not task:
-                raise KeyError(f"Task {task_id} not found")
-            updated = task.model_copy(update=kwargs)
-            self._store[task_id] = updated
+    async def set_error(self, task_id: str, error: str):
+        await self._update(task_id, status="error", error=error)
+
+    async def set_running(self, task_id: str):
+        await self._update(task_id, status="running", running_at=time.time())
+
+    async def set_done(self, task_id: str, completions: list):
+        await self._update(task_id, status="done", done_at=time.time(), completions=completions)
+        if self._save_on_dir:
+            file_path = f"{self._save_on_dir}/{task_id}.json"
+            with open(file_path, "w", encoding="utf-8") as file:
+                json.dump(completions, file)
+            logger.debug(f"💾 Task {task_id}  completions saved to {file_path}")
 
     async def get(self, task_id: str) -> Task:
         async with self._lock:
@@ -71,13 +92,13 @@ class TaskStore:
                 raise KeyError(f"Task {task_id} not found")
             return task
 
-    async def cleanup(self, older_than_secs: int = 600):
+    async def cleanup(self, older_than_secs: int = 60 * 10):
         async with self._lock:
             now = time.time()
             expired = [tid for tid, t in self._store.items() if t.done_at and (now - t.done_at) > older_than_secs]
             for tid in expired:
                 del self._store[tid]
-                logger.info(f"🗑️ Task {tid} expired and removed.")
+                logger.debug(f"🗑️ Task {tid} expired and removed.")
 
 
 @asynccontextmanager
@@ -105,7 +126,7 @@ async def lifespan(app: FastAPI):
     app.state.tokenizer = load_pretrained_tokenizer(model_name=model_name)
 
     # Initialize task store
-    app.state.task_store = TaskStore()
+    app.state.task_store = TaskStore(save_dir=FOLDER)
 
     # Initialize cleaning function
     async def cleanup_task_store():
@@ -164,7 +185,7 @@ async def generate(request_data: RequestData) -> Response:
                 logger.debug(f"Generation with custom params: {request_data.sampling_params}")
 
             async with app.state.engine_lock:
-                await app.state.task_store.update(task_id, status="running", running_at=time.time())
+                await app.state.task_store.set_running(task_id)
                 completions = await asyncio.to_thread(
                     _generate,
                     app.state.engine,
@@ -173,10 +194,10 @@ async def generate(request_data: RequestData) -> Response:
                     request_data.use_chatml,
                     request_data.sampling_params,
                 )
-            await app.state.task_store.update(task_id, status="done", completions=completions, done_at=time.time())
+            await app.state.task_store.set_done(task_id, completions=completions)
             logger.info(f"✅ Generation task {task_id} done.")
         except Exception as e:
-            await app.state.task_store.update(task_id, status="error", error=str(e))
+            await app.state.task_store.set_error(task_id, error=str(e))
             logger.error(f"❌ Generation task {task_id} failed: {e}")
 
     # Create task
