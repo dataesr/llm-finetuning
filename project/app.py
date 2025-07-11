@@ -90,13 +90,13 @@ class TaskStore:
                 raise KeyError(f"Task {task_id} not found")
             return task
 
-    async def cleanup(self, older_than_secs: int = 60 * 10):
-        async with self._lock:
-            now = time.time()
-            expired = [tid for tid, t in self._store.items() if t.done_at and (now - t.done_at) > older_than_secs]
-            for tid in expired:
-                del self._store[tid]
-                logger.debug(f"🗑️ Task {tid} expired and removed.")
+    # async def cleanup(self, older_than_secs: int = 60 * 10):
+    #     async with self._lock:
+    #         now = time.time()
+    #         expired = [tid for tid, t in self._store.items() if t.done_at and (now - t.done_at) > older_than_secs]
+    #         for tid in expired:
+    #             del self._store[tid]
+    #             logger.debug(f"🗑️ Task {tid} expired and removed.")
 
 
 @asynccontextmanager
@@ -127,10 +127,10 @@ async def lifespan(app: FastAPI):
     app.state.task_store = TaskStore()
 
     # Initialize cleaning function
-    async def cleanup_task_store():
-        while True:
-            await app.state.task_store.cleanup(older_than_secs=600)
-            await asyncio.sleep(60)
+    # async def cleanup_task_store():
+    #     while True:
+    #         await app.state.task_store.cleanup(older_than_secs=600)
+    #         await asyncio.sleep(60)
 
     asyncio.create_task(cleanup_task_store())
     logger.info(f"✅ Task store initialized")
@@ -270,7 +270,14 @@ def _generate(
     ]
 
     # Sampling params
-    full_params = {"seed": 0, "temperature": 0, "max_tokens": 1024, "skip_special_tokens": True, **sampling_params}
+    full_params = {
+        "seed": 0,
+        "temperature": 0,
+        "max_tokens": 1024,
+        "skip_special_tokens": True,
+        "truncate_prompt_tokens": tokenizer.model_max_length,
+        **sampling_params,
+    }
 
     # Generate outputs
     outputs = engine.generate(formatted_prompts, SamplingParams(**full_params))
