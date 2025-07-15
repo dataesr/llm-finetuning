@@ -142,7 +142,7 @@ def load_pretrained_tokenizer(model_name: str):
         # Use fast if tokenizer not correctly loaded
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    logger.debug(f"Max model length: {tokenizer.model_max_length}")
+    logger.debug(f"Max model length: {tokenizer.model_max_length!r}")
     logger.info(f"✅ Tokenizer loaded")
 
     return tokenizer

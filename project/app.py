@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
     #         await app.state.task_store.cleanup(older_than_secs=600)
     #         await asyncio.sleep(60)
 
-    asyncio.create_task(cleanup_task_store())
+    # asyncio.create_task(cleanup_task_store())
     logger.info(f"✅ Task store initialized")
 
     yield
@@ -270,12 +270,14 @@ def _generate(
     ]
 
     # Sampling params
+    max_length = tokenizer.model_max_length
+    truncate_length = max_length if isinstance(max_length, int) and max_length < 100_000 else 8192
     full_params = {
         "seed": 0,
         "temperature": 0,
         "max_tokens": 1024,
         "skip_special_tokens": True,
-        "truncate_prompt_tokens": tokenizer.model_max_length,
+        "truncate_prompt_tokens": truncate_length,
         **sampling_params,
     }
 
