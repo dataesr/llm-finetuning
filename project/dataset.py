@@ -125,7 +125,7 @@ def save_dataset_instruction(dataset, output_dir: str):
         dataset: Dataset used for fine tuning
         output_dir (str): Fine tuned model directory
     """
-    from project.pipeline import MERGED_FOLDER
+    from project.pipeline_causallm import MERGED_FOLDER
 
     output_merged_dir = os.path.join(output_dir, MERGED_FOLDER)
 

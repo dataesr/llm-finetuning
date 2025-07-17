@@ -5,15 +5,34 @@
 
 from project.args import get_args
 from project.hugging import push_to_hub
-from project.pipeline import fine_tune, delete_model
+from project.pipeline.trainer import delete_model
 from project.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+def get_fine_tune_fn(type: str = "causallm"):
+    if type == "causallm":
+        from project.pipeline.causallm import fine_tune
+
+        return fine_tune
+
+    elif type == "vision2seq":
+        from project.pipeline.vision2seq import fine_tune
+
+        return fine_tune
+
+    else:
+        logger.error(f"Incorrect model type {type}")
+        raise ValueError(f"Incorrect model type {type}. Should be 'casuallm' or 'vision2seq'")
+
+
 def main():
     # Get script arguments
     args = get_args()
+
+    # Get fine tune function
+    fine_tune = get_fine_tune_fn(args.model_type)
 
     # Fine-tuning pipeline
     if args.mode == "train":

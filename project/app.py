@@ -10,10 +10,10 @@ from fastapi import FastAPI, HTTPException, status as fastapi_status
 from fastapi.responses import ORJSONResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
+from transformers import AutoTokenizer
 from vllm import LLM
 from vllm.sampling_params import SamplingParams
 from vllm.version import __version__ as VLLM_VERSION
-from project.pipeline import load_pretrained_tokenizer
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -117,11 +117,15 @@ async def lifespan(app: FastAPI):
         disable_custom_all_reduce=True,
         disable_log_stats=False,
     )
-    logger.info(f"✅ vLLM engine loaded")
+    logger.info(f"✅ vLLM engine {VLLM_VERSION} loaded")
     app.state.engine_lock = asyncio.Lock()
 
     # Initialize tokenizer
-    app.state.tokenizer = load_pretrained_tokenizer(model_name=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    if not tokenizer:
+        logger.error(f"❌ Tokenizer not loaded!")
+    logger.info(f"✅ Tokenizer loaded")
+    app.state.tokenizer = tokenizer
 
     # Initialize task store
     app.state.task_store = TaskStore()

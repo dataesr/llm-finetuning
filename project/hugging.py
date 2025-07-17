@@ -15,7 +15,7 @@ def get_model(output_model_name: str) -> str:
     Returns:
     - model_dir (str): Fine-tuned model path
     """
-    from project.pipeline import FOLDER, MERGED_FOLDER
+    from project.pipeline.trainer import FOLDER, MERGED_FOLDER
 
     model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
 
