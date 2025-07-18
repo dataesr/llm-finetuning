@@ -43,7 +43,7 @@ bf16 = False  # Do not use bfloat16 precision
 max_grad_norm = 0.3  # Max gradient norm
 warmup_ratio = 0.03  # Warmup ratio
 lr_scheduler_type = "linear"  # Learning rate scheduler. Better to decrease the learning rate for long training. I prefer linear over to cosine as it is more predictable: easier to restart training if needed.
-report_to = "tensorboard"  # Report metrics to tensorboard
+report_to = "none"  # Report metrics to tensorboard
 group_by_length = True  # Group together samples of roughly the same length in the training dataset (to minimize padding applied and be more efficient)
 packing = False  # Pack short exemple to ecrease efficiency
 

@@ -18,6 +18,9 @@ def get_args():
         help="Execution mode: train model or push model to hub",
     )
     parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.2-1B", help="Base model to fine-tune")
+    parser.add_argument(
+        "--model_type", type=str, default="causallm", help="Type of base model: causallm or vision2seq supported"
+    )
     parser.add_argument("--dataset_name", type=str, default="test.json", help="Dataset to use for fine-tuning")
     parser.add_argument("--output_model_name", type=str, default=None, help="Fine-tuned model name")
     parser.add_argument("--hf_hub", type=str, default=None, help="Push the model to a Huggin Face Hub")
