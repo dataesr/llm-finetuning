@@ -1,12 +1,12 @@
 import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoPeftModelForCausalLM, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig
-from trl import SFTConfig
-from project.pipeline.trainer import initialize, train_model, save_model
-from project.dataset import get_dataset, save_dataset_instruction, TEXT_FIELD
+from trl import SFTConfig, SFTTrainer
+from datasets import Dataset
+from project.model.utils import model_get_finetuned_dir
+from project.dataset import save_dataset_instruction, TEXT_FIELD
 from project.logger import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,6 @@ bnb_4bit_quant_type = "nf4"  # Quantization data type
 max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
 # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
 max_seq_length = 8192
-
 num_train_epochs = 1  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -48,7 +47,7 @@ group_by_length = True  # Group together samples of roughly the same length in t
 packing = False  # Pack short exemple to ecrease efficiency
 
 
-def load_pretrained_model(model_name: str):
+def load_model_and_tokenizer(model_name: str):
     """
     Load pretrained causal model from huggingface
 
@@ -87,19 +86,25 @@ def load_pretrained_model(model_name: str):
     # model, tokenizer = setup_chat_format(model, tokenizer)
     # model.resize_token_embeddings(len(tokenizer))
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
-
-    torch.cuda.empty_cache()
-
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
 
-
-def build_sft_config(output_dir: str):
+def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTrainer:
     """
-    Get sft config (training args)
+    Build SFTTrainer for finetuning
+    
+    Args:
+    - model: model to finetune
+    - tokenizer: tokenizer:
+    - dataset: Dataset
+    - output_dir: training output directory
+    
+    Returns:
+    - trainer: SFTTrainer
     """
-    sft_config = SFTConfig(
+    # Build sft config
+    training_args = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
@@ -121,13 +126,8 @@ def build_sft_config(output_dir: str):
         max_seq_length=max_seq_length,
         dataset_text_field=TEXT_FIELD,
     )
-    return sft_config
-
-
-def build_peft_config():
-    """
-    Get peft config (LoRa)
-    """
+    
+    # Build lora config
     peft_config = LoraConfig(
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,
@@ -135,47 +135,110 @@ def build_peft_config():
         task_type=lora_task_type,
         target_modules=lora_target_modules,
     )
+    
+    # Build sft trainer
+    trainer = SFTTrainer(
+        model=model,
+        train_dataset=dataset,
+        processing_class=tokenizer,
+        args=training_args,
+        peft_config=peft_config,
+    )
+    
+    return trainer
 
-    return peft_config
 
-
-def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None, use_chatml: bool = False):
+def build_format_prompt_fnc(tokenizer):
     """
-    Fine-tuning pipeline
+    Build formatting prompts function with tokenizer
+    Returns format_prompt_fnc(inputs)
+    """
+    def format_prompt_fnc(inputs):
+        conversations = inputs["chat_ml_format"]
+        texts = [tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=False) for conv in conversations]
+        return {
+            "text": texts,
+        }
+
+    return format_prompt_fnc
+
+def format_dataset(dataset: Dataset, tokenizer):
+    """
+    Format dataset object with chatml format
+    Args:
+    - dataset: Dataset
+    - tokenizer
+    """
+    format_fnc = build_format_prompt_fnc(tokenizer)
+    dataset = dataset.map(format_fnc, batched=True)
+
+    logger.debug(f"✅ Dataset formatted with chatml format")
+    logger.debug(f"Dataset sample: {dataset[0]["text"]}")
+
+    return dataset
+
+
+def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
+    """
+    Save trained model and tokenizer.
 
     Args:
-    - model_name (str): Model to fine-tune
-    - dataset_name (str): Dataset to use for fine-tuning
-    - output_model_name (str): Fine-tuned model name. Default to None
-    - use_chatml (bool): if True, use chatml tokenizer
+        trainer: SFTTrainer 
+        tokenizer: Tokenizer to save
+        output_model_name (str): Name of the saved model
+        output_dir (str): Path to output directory
     """
+    logger.info(f"Start saving model to {output_dir}")
 
-    logger.info(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
+    # Get actual model object (handle DDP or not)
+    model_to_save = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
 
-    # Initialize llm folder
-    output_model_name, output_dir = initialize(model_name, output_model_name)
+    # Save base checkpoint (with adapter if PEFT)
+    model_to_save.save_pretrained(output_dir)
+    logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
+
+    # Save tokenizer
+    tokenizer.save_pretrained(output_dir)
+    logger.debug(f"Tokenizer vocab size: {len(tokenizer)}")
+
+    # Load and merge model
+    model = AutoPeftModelForCausalLM.from_pretrained(
+            output_dir,
+            device_map="auto",  
+            torch_dtype=torch.bfloat16,
+        )
+    model = model.merge_and_unload()
+
+    # Save final merged model
+    output_merged_dir = model_get_finetuned_dir(output_model_name)
+    model.save_pretrained(output_merged_dir, safe_serialization=True)
+    tokenizer.save_pretrained(output_merged_dir)
+
+    logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")
+
+    # Cleanup
+    torch.cuda.empty_cache()
+    del model_to_save
+    del model
+    del trainer
+    del tokenizer
+
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+    logger.info(f"Start llama fine tuning pipeline")
 
     # Load the model and the tokenizer
-    model, tokenizer = load_pretrained_model(model_name)
+    model, tokenizer = load_model_and_tokenizer(model_name)
 
-    # Load dataset
-    dataset = get_dataset(dataset_name, tokenizer=tokenizer, use_chatml=use_chatml)
-
-    # Build sft config
-    sft_config = build_sft_config(output_dir=output_dir)
-
-    # Build peft config
-    peft_config = build_peft_config()
+    # Format dataset as chatml
+    dataset = format_dataset(dataset, tokenizer)
 
     # Train the model
-    trainer = train_model(
-        model, tokenizer, dataset=dataset, sft_config=sft_config, peft_config=peft_config, output_dir=output_dir
-    )
+    trainer = build_trainer(model, tokenizer, dataset, output_dir)
+    trainer.train()
+    logger.info("✅ Model trained")
 
     # Save the model
-    save_model(trainer, output_model_name=output_model_name, output_dir=output_dir, tokenizer=tokenizer)
+    merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
 
     # Save the instruction
-    save_dataset_instruction(dataset, output_dir=output_dir)
-
-    return output_model_name
+    save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))

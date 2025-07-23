@@ -1,21 +1,19 @@
+import os
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq
-from trl import SFTConfig
-from project.pipeline.trainer import initialize, train_model, save_model
-from project.dataset import get_dataset, save_dataset_instruction, TEXT_FIELD
+from trl import SFTConfig, SFTTrainer
+from datasets import Dataset
+from project.model.utils import model_get_finetuned_dir
+from project.dataset import save_dataset_instruction
 from project.logger import get_logger
 
-
 logger = get_logger(__name__)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
 max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
 # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
 max_seq_length = 8192
-
 num_train_epochs = 5  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -32,9 +30,9 @@ logging_steps = 10  # Log every 10 step
 save_steps = 200  # We're going to save the model weights every 200 steps to save our checkpoint
 
 
-def load_pretrained_model(model_name: str):
+def load_model_and_processor(model_name: str):
     """
-    Load pretrained multimodal model from huggingface
+    Load model and processor
 
     Args:
     - model_name (str): Model to load
@@ -62,10 +60,8 @@ def load_pretrained_model(model_name: str):
     )
     processor.eos_token = processor.tokenizer.eos_token
     processor.eos_token_id = processor.tokenizer.eos_token_id
+
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
-
-    torch.cuda.empty_cache()
-
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, processor
@@ -73,7 +69,7 @@ def load_pretrained_model(model_name: str):
 
 def build_collate_fn(processor):
     """
-    Get data collator function
+    Build data collator function
     """
 
     def collate_fn(inputs):
@@ -108,11 +104,24 @@ def build_collate_fn(processor):
     return collate_fn
 
 
-def build_sft_config(output_dir: str):
+def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTrainer:
     """
-    Get sft config (training args)
+    Build SFTTrainer for finetuning
+
+    Args:
+    - model: model to finetune
+    - processor: processor
+    - dataset: Dataset
+    - output_dir: training output directory
+
+    Returns:
+    - trainer: SFTTrainer
     """
-    sft_config = SFTConfig(
+    # Build collator fnc
+    data_collator = build_collate_fn(processor)
+
+    # Build sft config
+    training_args = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
@@ -128,52 +137,67 @@ def build_sft_config(output_dir: str):
         max_steps=max_steps,
         warmup_ratio=warmup_ratio,
         lr_scheduler_type=lr_scheduler_type,
-        max_seq_length=max_seq_length,
-        dataset_text_field=TEXT_FIELD,
+        # max_seq_length=max_seq_length,
     )
-    return sft_config
+
+    # Build sft trainer
+    trainer = SFTTrainer(
+        model=model,
+        train_dataset=dataset,
+        processing_class=processor.tokenizer,
+        args=training_args,
+        data_collator=data_collator,
+    )
+
+    return trainer
 
 
-def fine_tune(model_name: str, dataset_name: str, output_model_name: str = None):
+def save_model(trainer, processor, output_model_name: str, output_dir: str):
     """
-    Fine-tuning pipeline
+    Save trained model and processor.
 
     Args:
-    - model_name (str): Model to fine-tune
-    - dataset_name (str): Dataset to use for fine-tuning
-    - output_model_name (str): Fine-tuned model name. Default to None
+        trainer: SFTTrainer
+        processor: processor to save
+        output_model_name (str): Name for the saved model
+        output_dir (str): Path to output directory
     """
+    model_dir = model_get_finetuned_dir(output_model_name)
+    logger.info(f"Start saving model to {model_dir}")
 
-    logger.info(f"Start fine tuning of model {model_name} with dataset {dataset_name}")
+    # Get actual model object (handle DDP or not)
+    model_to_save = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
 
-    # Initialize llm folder
-    output_model_name, output_dir = initialize(model_name, output_model_name)
+    # Save model and tokenizer
+    model_to_save.save_pretrained(model_dir)
+    logger.debug(f"Model embeddings size: {model_to_save.get_input_embeddings().weight.shape}")
 
-    # Load the model and the processor
-    model, processor = load_pretrained_model(model_name)
+    # Save tokenizer or processor
+    processor.save_pretrained(model_dir)
+    logger.debug(f"Tokenizer vocab size: {len(processor.tokenizer)}")
 
-    # Load dataset
-    dataset = get_dataset(dataset_name, tokenizer=processor.tokenizer, use_chatml=True)  # chatml mandatory
+    logger.info(f"✅ Fine-tuned model {output_model_name} saved to {model_dir}")
 
-    # Build collate function
-    collate_fn = build_collate_fn(processor)
+    # Cleanup
+    torch.cuda.empty_cache()
+    del model_to_save
+    del trainer
+    del processor
 
-    # Build sft_config
-    sft_config = build_sft_config(output_dir)
+
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+    logger.info(f"Start llama fine tuning pipeline")
+
+    # Load the model and the tokenizer
+    model, processor = load_model_and_processor(model_name)
 
     # Train the model
-    trainer = train_model(
-        model,
-        tokenizer=processor.tokenizer,
-        dataset=dataset,
-        sft_config=sft_config,
-        data_collator=collate_fn,
-    )
+    trainer = build_trainer(model, processor, dataset, output_dir)
+    trainer.train()
+    logger.info("✅ Model trained")
 
     # Save the model
-    save_model(trainer, output_dir=output_dir, output_model_name=output_model_name, processor=processor)
+    save_model(trainer, processor, output_model_name, output_dir)
 
     # Save the instruction
-    save_dataset_instruction(dataset, output_dir=output_dir)
-
-    return output_model_name
+    save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
