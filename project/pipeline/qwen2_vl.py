@@ -11,9 +11,6 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
-max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
-# Context window length. Llama can now technically push further, but I find attention is no longer working so well.
-max_seq_length = 8192
 num_train_epochs = 5  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -21,7 +18,6 @@ gradient_checkpointing = True  # Use gradient checkpointing to save memory
 gradient_checkpointing_kwargs = ({"use_reentrant": False},)  # Options for gradient checkpointing
 learning_rate = 1e-5  # The initial learning rate for AdamW optimizer
 lr_scheduler_type = "constant"  # Scheduler rate type
-fp16 = False  # Dno not use fp16 precision
 bf16 = True  # Use bfloat16 precision
 max_grad_norm = 0.3  # Max gradient norm
 warmup_ratio = 0.03  # Warmup ratio
@@ -131,10 +127,9 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         save_steps=save_steps,
         logging_steps=logging_steps,
         learning_rate=learning_rate,
-        fp16=fp16,
         bf16=bf16,
         max_grad_norm=max_grad_norm,
-        max_steps=max_steps,
+        # max_steps=max_steps,
         warmup_ratio=warmup_ratio,
         lr_scheduler_type=lr_scheduler_type,
         # max_seq_length=max_seq_length,

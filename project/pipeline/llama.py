@@ -1,7 +1,6 @@
-import os
 import torch
-from transformers import AutoPeftModelForCausalLM, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
@@ -26,7 +25,7 @@ bnb_4bit_compute_dtype = "float16"  # Computational type
 bnb_4bit_quant_type = "nf4"  # Quantization data type
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
-max_steps = 600  # Was originally trained on 3000 but better to keep the value low for test purposes.
+max_steps = 10  # Was originally trained on 3000 but better to keep the value low for test purposes.
 # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
 max_seq_length = 8192
 num_train_epochs = 1  # Number of training epochs

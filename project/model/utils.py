@@ -19,7 +19,7 @@ def model_default_output_name(model_name: str, suffix: str = None) -> str:
     output_model_name = f"{model_name.split("/")[-1]}-{suffix}"
     return output_model_name
 
-def model_get_finetuned_dir(output_model_name:str):
+def model_get_finetuned_dir(output_model_name:str, check:bool=False):
     """
     Get finetuned model folder
 
@@ -33,7 +33,7 @@ def model_get_finetuned_dir(output_model_name:str):
 
     model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
 
-    if not os.path.isdir(model_dir):
+    if check and not os.path.isdir(model_dir):
         raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
 
     return model_dir

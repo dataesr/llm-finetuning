@@ -24,13 +24,13 @@ def model_get_config(model_name: str, forced_config: str = None) -> str:
         raise ValueError(f"No remote config found for model {model_name}")
 
     # Check if model type exists in config
-    model_type = config.get("model_type")
+    model_type = config.model_type
     logger.debug(f"Model {model_name} type = {model_type}")
     if model_type in CONFIG_ALL:
-        return CONFIG_ALL[model_type]
+        return model_type
 
     # Otherwise check model architecture
-    model_arch = config.get("architectures", [])[0]
+    model_arch = config.architectures[0]
     logger.debug(f"Model {model_name} architecture = {model_arch}")
     if model_arch and isinstance(model_arch, str):
         for conf in CONFIG_DEFAULT:

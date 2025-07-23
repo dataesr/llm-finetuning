@@ -49,7 +49,7 @@ def push_to_hub(output_model_name: str, repo_id: str, private=False):
     - private (bool): If True, creates a private repo
     """
     # Get model folder
-    model_dir = model_get_finetuned_dir(output_model_name)
+    model_dir = model_get_finetuned_dir(output_model_name, check=True)
 
     # Upload model to hub
     upload_model_to_hub(model_dir, repo_id=repo_id, private=private)

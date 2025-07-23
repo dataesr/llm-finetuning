@@ -25,7 +25,7 @@ def main():
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
 
-        model_delete_dir(output_model_name)
+        # model_delete_dir(output_model_name)
 
     # Upload model to hub
     elif args.mode == "push":
@@ -39,7 +39,7 @@ def main():
 
         push_to_hub(args.output_model_name, args.hf_hub, args.hf_hub_private)
 
-        model_delete_dir(args.output_model_name)
+        # model_delete_dir(args.output_model_name)
 
     else:
         raise ValueError(f"Incorrect mode {args.mode}")
