@@ -20,7 +20,12 @@ def main():
     if args.mode == "train":
         logger.debug(f"Start fine-tuning script with args {args}")
 
-        output_model_name = model_train(args.model_name, args.dataset_name, args.output_model_name)
+        output_model_name = model_train(
+            model_name=args.model_name,
+            output_model_name=args.output_model_name,
+            dataset_name=args.dataset_name,
+            completion_column=args.dataset_completion_column,
+        )
 
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)

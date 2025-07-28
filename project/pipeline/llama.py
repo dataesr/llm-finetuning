@@ -4,7 +4,7 @@ from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, TEXT_FIELD
+from project.dataset import save_dataset_instruction, TEXT_FIELD, INSTRUCTION_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -146,14 +146,27 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     
     return trainer
 
+def construct_conversations(inputs, completion_column):
+    
+    conversations = [
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+                {"role": "assistant", "content": assistant},
+            ]
+            for system, user, assistant in zip(inputs[INSTRUCTION_FIELD], inputs["input"], inputs[completion_column])
+        ]
 
-def build_format_prompt_fnc(tokenizer):
+    logger.debug(f"conversation: {conversations[0]}")
+    return conversations
+
+def build_format_prompt_fnc(tokenizer, completion_column: str):
     """
     Build formatting prompts function with tokenizer
     Returns format_prompt_fnc(inputs)
     """
     def format_prompt_fnc(inputs):
-        conversations = inputs["chat_ml_format"]
+        conversations = construct_conversations(inputs, completion_column=completion_column)
         texts = [tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=False) for conv in conversations]
         return {
             "text": texts,
@@ -161,17 +174,17 @@ def build_format_prompt_fnc(tokenizer):
 
     return format_prompt_fnc
 
-def format_dataset(dataset: Dataset, tokenizer):
+def format_dataset(dataset: Dataset, tokenizer, completion_column: str):
     """
     Format dataset object with chatml format
     Args:
     - dataset: Dataset
     - tokenizer
     """
-    format_fnc = build_format_prompt_fnc(tokenizer)
+    format_fnc = build_format_prompt_fnc(tokenizer, completion_column)
     dataset = dataset.map(format_fnc, batched=True)
 
-    logger.debug(f"✅ Dataset formatted with chatml format")
+    logger.debug(f"✅ Dataset formatted with chatml text format")
     logger.debug(f"Dataset sample: {dataset[0]["text"]}")
 
     return dataset
@@ -222,14 +235,14 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     del trainer
     del tokenizer
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
     logger.info(f"Start llama fine tuning pipeline")
 
     # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name)
 
     # Format dataset as chatml
-    dataset = format_dataset(dataset, tokenizer)
+    dataset = format_dataset(dataset, tokenizer, completion_column)
 
     # Train the model
     trainer = build_trainer(model, tokenizer, dataset, output_dir)

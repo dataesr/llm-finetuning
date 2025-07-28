@@ -4,7 +4,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction
+from project.dataset import save_dataset_instruction, format_dataset_chatml
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -61,6 +61,44 @@ def load_model_and_processor(model_name: str):
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, processor
+
+
+def construct_messages(
+    input, instruction, template, examples=None, image_placeholder="<|vision_start|><|image_pad|><|vision_end|>"
+):
+    """
+    Construct the individual NuExtract message texts, prior to chat template formatting.
+    """
+    images = []
+    # add few-shot examples if needed
+    if examples is not None and len(examples) > 0:
+        icl = "# Examples:\n"
+        for row in examples:
+            example_input = row["input"]
+
+            if not isinstance(row["input"], str):
+                example_input = image_placeholder
+                images.append(row["input"])
+
+            icl += f"## Input:\n{example_input}\n## Output:\n{row['output']}\n"
+    else:
+        icl = ""
+
+    # if input document is an image, set text to an image placeholder
+    text = input
+    if not isinstance(input, str):
+        text = image_placeholder
+        images.append(input)
+    text = f"""# Template:\n{template}\n{icl}# Context:\n{text}"""
+
+    messages = [
+        {"role": "system", "content": instruction},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": text}] + images,
+        },
+    ]
+    return messages
 
 
 def build_collate_fn(processor):
@@ -180,7 +218,7 @@ def save_model(trainer, processor, output_model_name: str, output_dir: str):
     del processor
 
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
     logger.info(f"Start llama fine tuning pipeline")
 
     # Load the model and the tokenizer

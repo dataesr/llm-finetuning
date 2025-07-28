@@ -1,4 +1,5 @@
 import os
+import json
 from datasets import load_dataset, Dataset
 from project.logger import get_logger
 
@@ -72,7 +73,26 @@ def get_dataset(object_name: str) -> Dataset:
     return dataset
 
 
-def save_dataset_instruction(dataset, destination: str):
+def format_dataset_chatml(dataset, completion_column):
+
+    def apply_chatml(batch):
+        batch["completion_chatml"] = [
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+                {"role": "assistant", "content": f"{assistant}"},
+            ]
+            for system, user, assistant in zip(batch[INSTRUCTION_FIELD], batch["input"], batch[completion_column])
+        ]
+        return batch
+
+    dataset = dataset.map(apply_chatml, batched=True)
+    logger.debug(f"✅ Completion formated with chatml format")
+    logger.debug(f"Dataset sample: {dataset[0]["completion_chatml"]}")
+    return dataset
+
+
+def save_dataset_instruction(dataset: Dataset, destination: str):
     """
     Save dataset instruction as file in model folder
 
