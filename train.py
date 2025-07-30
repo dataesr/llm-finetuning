@@ -5,7 +5,8 @@
 
 from project.args import get_args
 from project.hugging import push_to_hub
-from project.pipeline import fine_tune, delete_model
+from project.model.utils import model_delete_dir
+from project.model.train import model_train
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -19,12 +20,17 @@ def main():
     if args.mode == "train":
         logger.debug(f"Start fine-tuning script with args {args}")
 
-        output_model_name = fine_tune(args.model_name, args.dataset_name, args.output_model_name, args.use_chatml)
+        output_model_name = model_train(
+            model_name=args.model_name,
+            output_model_name=args.output_model_name,
+            dataset_name=args.dataset_name,
+            completion_column=args.dataset_completion_column,
+        )
 
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
 
-        delete_model(output_model_name)
+        # model_delete_dir(output_model_name)
 
     # Upload model to hub
     elif args.mode == "push":
@@ -38,7 +44,7 @@ def main():
 
         push_to_hub(args.output_model_name, args.hf_hub, args.hf_hub_private)
 
-        delete_model(args.output_model_name)
+        # model_delete_dir(args.output_model_name)
 
     else:
         raise ValueError(f"Incorrect mode {args.mode}")

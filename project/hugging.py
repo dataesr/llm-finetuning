@@ -1,28 +1,9 @@
 import os
-from project.logger import get_logger
 from huggingface_hub import create_repo, upload_folder
+from project.model.utils import model_get_finetuned_dir
+from project.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def get_model(output_model_name: str) -> str:
-    """
-    Get model folder
-
-    Args:
-    - output_model_name (str): Fine-tuned model name
-
-    Returns:
-    - model_dir (str): Fine-tuned model path
-    """
-    from project.pipeline import FOLDER, MERGED_FOLDER
-
-    model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
-
-    if not os.path.isdir(model_dir):
-        raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
-
-    return model_dir
 
 
 def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
@@ -68,7 +49,7 @@ def push_to_hub(output_model_name: str, repo_id: str, private=False):
     - private (bool): If True, creates a private repo
     """
     # Get model folder
-    model_dir = get_model(output_model_name)
+    model_dir = model_get_finetuned_dir(output_model_name, check=True)
 
     # Upload model to hub
     upload_model_to_hub(model_dir, repo_id=repo_id, private=private)
