@@ -85,6 +85,7 @@ def load_model_and_tokenizer(model_name: str):
     # model, tokenizer = setup_chat_format(model, tokenizer)
     # model.resize_token_embeddings(len(tokenizer))
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
+    logger.debug(f"Tokenizer template: {tokenizer.chat_template}")
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
@@ -123,9 +124,9 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         report_to=report_to,
         packing=packing,
         max_seq_length=max_seq_length,
-        dataset_text_field=TEXT_FIELD,
+        # dataset_text_field="conversations" # automatically handled
     )
-    
+
     # Build lora config
     peft_config = LoraConfig(
         lora_alpha=lora_alpha,
@@ -134,7 +135,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         task_type=lora_task_type,
         target_modules=lora_target_modules,
     )
-    
+
     # Build sft trainer
     trainer = SFTTrainer(
         model=model,
@@ -143,50 +144,54 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         args=training_args,
         peft_config=peft_config,
     )
-    
+
     return trainer
 
-def construct_conversations(inputs, completion_column):
-    
-    conversations = [
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-                {"role": "assistant", "content": assistant},
-            ]
-            for system, user, assistant in zip(inputs[INSTRUCTION_FIELD], inputs["input"], inputs[completion_column])
-        ]
 
-    logger.debug(f"conversation: {conversations[0]}")
-    return conversations
+def construct_one_conversation(system: str, user: str, assistant: str = None):
+    """
+    Construct a conversation from system, user and assistant messages
 
-def build_format_prompt_fnc(tokenizer, completion_column: str):
+    Args:
+    - system (str): system instructions
+    - user (str): user input
+    - assistant (str, optional): assistant completion for training. Defaults to None.
+
+    Returns a conversation object
     """
-    Build formatting prompts function with tokenizer
-    Returns format_prompt_fnc(inputs)
+    conversation = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    if assistant:
+        conversation.append({"role": "assistant", "content": assistant})
+    return conversation
+
+
+def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset:
     """
-    def format_prompt_fnc(inputs):
-        conversations = construct_conversations(inputs, completion_column=completion_column)
-        texts = [tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=False) for conv in conversations]
+    Construct conversations style column for training
+
+    Args:
+    - dataset (Dataset): training dataset
+    - completion_column (str): completion column to use
+
+    Returns the training dataset with a conversations column
+    """
+
+    def map_conversations(example):
         return {
-            "text": texts,
+            "conversations": construct_one_conversation(
+                example[INSTRUCTION_FIELD],
+                example["input"],
+                example[completion_column],
+            )
         }
 
-    return format_prompt_fnc
-
-def format_dataset(dataset: Dataset, tokenizer, completion_column: str):
-    """
-    Format dataset object with chatml format
-    Args:
-    - dataset: Dataset
-    - tokenizer
-    """
-    format_fnc = build_format_prompt_fnc(tokenizer, completion_column)
-    dataset = dataset.map(format_fnc, batched=True)
-
-    logger.debug(f"✅ Dataset formatted with chatml text format")
-    logger.debug(f"Dataset sample: {dataset[0]["text"]}")
-
+    dataset = dataset.map(map_conversations)
+    logger.debug(f"✅ Dataset formatted with conversation format")
+    logger.debug(f"Dataset columns: {dataset.column_names}")
+    logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
     return dataset
 
 
@@ -195,10 +200,10 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     Save trained model and tokenizer.
 
     Args:
-        trainer: SFTTrainer 
-        tokenizer: Tokenizer to save
-        output_model_name (str): Name of the saved model
-        output_dir (str): Path to output directory
+    - trainer: SFTTrainer
+    - tokenizer: Tokenizer to save
+    - output_model_name (str): Name of the saved model
+    - output_dir (str): Path to output directory
     """
     logger.info(f"Start saving model to {output_dir}")
 
@@ -236,13 +241,23 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     del tokenizer
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
-    logger.info(f"Start llama fine tuning pipeline")
+    """
+    LLama model training pipeline
+
+    Args:
+        model_name (str): model to train
+        output_model_name (str): model name to output
+        output_dir (str): directory to output
+        dataset (Dataset): training dataset
+        completion_column (str): completion column to use in training dataset
+    """
+    logger.info(f"▶️ Start llama fine tuning pipeline")
 
     # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name)
 
-    # Format dataset as chatml
-    dataset = format_dataset(dataset, tokenizer, completion_column)
+    # Format dataset as conversations in new column
+    dataset = construct_conversations(dataset, completion_column)
 
     # Train the model
     trainer = build_trainer(model, tokenizer, dataset, output_dir)

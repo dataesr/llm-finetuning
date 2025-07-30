@@ -4,7 +4,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, format_dataset_chatml
+from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, TEXT_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -15,7 +15,7 @@ num_train_epochs = 5  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
 gradient_checkpointing = True  # Use gradient checkpointing to save memory
-gradient_checkpointing_kwargs = ({"use_reentrant": False},)  # Options for gradient checkpointing
+gradient_checkpointing_kwargs = {"use_reentrant": False}  # Options for gradient checkpointing
 learning_rate = 1e-5  # The initial learning rate for AdamW optimizer
 lr_scheduler_type = "constant"  # Scheduler rate type
 bf16 = True  # Use bfloat16 precision
@@ -43,7 +43,7 @@ def load_model_and_processor(model_name: str):
         model_name,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
+        # attn_implementation="flash_attention_2",
         device_map="auto",
         use_cache=False,  # for training
     )
@@ -58,84 +58,102 @@ def load_model_and_processor(model_name: str):
     processor.eos_token_id = processor.tokenizer.eos_token_id
 
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
+    logger.debug(f"Tokenizer template: {processor.tokenizer.chat_template}")
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, processor
 
 
-def construct_messages(
-    input, instruction, template, examples=None, image_placeholder="<|vision_start|><|image_pad|><|vision_end|>"
-):
+def construct_one_conversation(system: str, user: str, template: str, assistant: str = None):
     """
-    Construct the individual NuExtract message texts, prior to chat template formatting.
+    Construct a conversation from system, user and assistant messages
+
+    Args:
+    - system (str): system instructions
+    - user (str): user input
+    - template (str): extraction template (for NuExtract)
+    - assistant (str, optional): assistant completion for training. Defaults to None.
+
+    Returns a conversation object
     """
-    images = []
-    # add few-shot examples if needed
-    if examples is not None and len(examples) > 0:
-        icl = "# Examples:\n"
-        for row in examples:
-            example_input = row["input"]
-
-            if not isinstance(row["input"], str):
-                example_input = image_placeholder
-                images.append(row["input"])
-
-            icl += f"## Input:\n{example_input}\n## Output:\n{row['output']}\n"
-    else:
-        icl = ""
-
-    # if input document is an image, set text to an image placeholder
-    text = input
-    if not isinstance(input, str):
-        text = image_placeholder
-        images.append(input)
-    text = f"""# Template:\n{template}\n{icl}# Context:\n{text}"""
-
-    messages = [
-        {"role": "system", "content": instruction},
-        {
-            "role": "user",
-            "content": [{"type": "text", "text": text}] + images,
-        },
+    conversation = [
+        {"role": "system", "content": [{"type": "text", "text": system}]},
+        {"role": "user", "content": [{"type": "text", "text": f"# Template:\n{template}\n# Context:\n{user}"}]},
     ]
-    return messages
+    if assistant:
+        conversation.append({"role": "assistant", "content": [{"type": "text", "text": f"{assistant}"}]})
+    return conversation
 
 
-def build_collate_fn(processor):
+def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset:
     """
-    Build data collator function
+    Construct conversations style column for training
+
+    Args:
+    - dataset (Dataset): training dataset
+    - completion_column (str): completion column to use
+
+    Returns the training dataset with a conversations column
     """
 
-    def collate_fn(inputs):
-        # process input/prompt part of conversations
-        user_texts = [processor.apply_chat_template(input[:1], tokenize=False) for input in inputs]
+    def map_conversations(example):
+        return {
+            "conversations": construct_one_conversation(
+                example[INSTRUCTION_FIELD],
+                example["input"],
+                example["template"],
+                example[completion_column],
+            )
+        }
 
-        # process full conversations (user + assistant)
-        full_texts = [processor.apply_chat_template(input, tokenize=False) for input in inputs]
+    dataset = dataset.map(map_conversations)
+    logger.debug(f"✅ Dataset formatted with conversation format")
+    logger.debug(f"Dataset columns: {dataset.column_names}")
+    logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
+    return dataset
 
-        # process images
-        images = None
 
-        # tokenize sequences
-        user_batch = processor(text=user_texts, images=images, return_tensors="pt", padding=True)
-        full_batch = processor(text=full_texts, images=images, return_tensors="pt", padding=True)
+# def build_collate_fn(processor):
+#     """
+#     Build data collator function.
+#     Mask system and user prompts to reduce loss on assistant prompt only
 
-        # mask padding tokens
-        labels = full_batch["input_ids"].clone()
-        labels[labels == processor.tokenizer.pad_token_id] = -100
+#     Args: processor
+#     Returns: inputs_ids, labels
+#     """
 
-        # mask user message tokens for each example in the batch
-        for i in range(len(inputs)):
-            # length of prompt message (accounting for possible padding)
-            user_len = user_batch["attention_mask"][i].sum().item()
+#     def collate_fn(inputs):
+#         # process system and user part of conversations
+#         logger.debug(f"💥INPUTS: {inputs}")
+#         assistant_idx = next(i for i, m in enumerate(inputs) if m["role"] == "assistant")
+#         user_texts = [processor.apply_chat_template(input[:assistant_idx], tokenize=False) for input in inputs]
 
-            # mask prompt part of label
-            labels[i, : user_len - 1] = -100
+#         # process full conversations (system + user + assistant)
+#         full_texts = [processor.apply_chat_template(input, tokenize=False) for input in inputs]
 
-        full_batch["labels"] = labels
-        return full_batch
+#         # process images
+#         images = None
 
-    return collate_fn
+#         # tokenize sequences
+#         user_batch = processor(text=user_texts, images=images, return_tensors="pt", padding=True)
+#         full_batch = processor(text=full_texts, images=images, return_tensors="pt", padding=True)
+
+#         # mask padding tokens
+#         labels = full_batch["input_ids"].clone()
+#         labels[labels == processor.tokenizer.pad_token_id] = -100
+
+#         # mask user message tokens for each example in the batch
+#         for i in range(len(inputs)):
+#             # length of prompt message (accounting for possible padding)
+#             user_len = user_batch["attention_mask"][i].sum().item()
+
+#             # mask prompt part of label
+#             labels[i, : user_len - 1] = -100
+
+#         full_batch["labels"] = labels
+#         return full_batch
+
+#     return collate_fn
 
 
 def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTrainer:
@@ -152,7 +170,7 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
     - trainer: SFTTrainer
     """
     # Build collator fnc
-    data_collator = build_collate_fn(processor)
+    # data_collator = build_collate_fn(processor)
 
     # Build sft config
     training_args = SFTConfig(
@@ -179,7 +197,7 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         train_dataset=dataset,
         processing_class=processor.tokenizer,
         args=training_args,
-        data_collator=data_collator,
+        # data_collator=data_collator,
     )
 
     return trainer
@@ -219,10 +237,23 @@ def save_model(trainer, processor, output_model_name: str, output_dir: str):
 
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
-    logger.info(f"Start llama fine tuning pipeline")
+    """
+    Qwen2_vl model training pipeline
+
+    Args:
+        model_name (str): model to train
+        output_model_name (str): model name to output
+        output_dir (str): directory to output
+        dataset (Dataset): training dataset
+        completion_column (str): completion column to use in training dataset
+    """
+    logger.info(f"▶️ Start qwen2_vl fine tuning pipeline")
 
     # Load the model and the tokenizer
     model, processor = load_model_and_processor(model_name)
+
+    # Format dataset as conversations in new column
+    dataset = construct_conversations(dataset, completion_column=completion_column)
 
     # Train the model
     trainer = build_trainer(model, processor, dataset, output_dir)
