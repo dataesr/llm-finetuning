@@ -1,34 +1,31 @@
 import os
 import json
 import asyncio
+import importlib
 import torch
 from uuid import uuid4
 import time
-from typing import Union, Literal, Optional, Dict, Any
+from typing import Literal, Optional, Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status as fastapi_status
 from fastapi.responses import ORJSONResponse, JSONResponse, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
-from transformers import AutoTokenizer
 from vllm import LLM
 from vllm.sampling_params import SamplingParams
+from vllm.transformers_utils.tokenizer import get_tokenizer
 from vllm.version import __version__ as VLLM_VERSION
+from project.model.config import model_get_config, model_get_instruction
 from project.logger import get_logger
 
 logger = get_logger(__name__)
 
 FOLDER = "completions"
 
-class ChatMessage(BaseModel):
-    """Chat message class"""
-    role: Literal["system", "user", "assistant"]
-    content: str
-
 class RequestData(BaseModel):
     """Generate request inputs"""
-    prompts: list[Union[str, list[ChatMessage]]]
-    use_chatml: bool = False
+    prompts: list[str]
+    chat_template_params: Dict[str, Any] = {}
     sampling_params: Dict[str, Any] = {}
 
 class Task(BaseModel):
@@ -48,7 +45,7 @@ class TaskStore:
         self._lock = asyncio.Lock()
         self._save_on_dir = FOLDER
         if not os.path.isdir(FOLDER):
-            logger.warning("TaskStore saving directory not found: saving to disk disabled")
+            logger.warning("⚠️ TaskStore saving directory not found: saving to disk disabled")
             self._save_on_dir = None
 
     async def _update(self, task_id: str, **kwargs):
@@ -81,7 +78,7 @@ class TaskStore:
             with open(file_path, "w", encoding="utf-8") as file:
                 json.dump(completions, file)
             logger.debug(f"{os.listdir(FOLDER)}")
-            logger.debug(f"💾 Task {task_id}  completions saved to {file_path}")
+            logger.debug(f"💾 Task {task_id} completions saved to {file_path}")
 
     async def get(self, task_id: str) -> Task:
         async with self._lock:
@@ -106,6 +103,13 @@ async def lifespan(app: FastAPI):
     model_name = os.getenv("MODEL_NAME")
     assert model_name is not None
 
+    # Get model pipeline
+    config = model_get_config(model_name)
+    app.state.pipeline = importlib.import_module(f"project.pipeline.{config}")
+
+    # Get model instruction
+    app.state.model_instruction = model_get_instruction(model_name)
+
     # Initialize vllm engine
     app.state.engine = LLM(
         model=model_name,
@@ -121,7 +125,7 @@ async def lifespan(app: FastAPI):
     app.state.engine_lock = asyncio.Lock()
 
     # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    tokenizer = get_tokenizer(model_name, trust_remote_code=True)
     if not tokenizer:
         logger.error(f"❌ Tokenizer not loaded!")
     logger.info(f"✅ Tokenizer loaded")
@@ -172,23 +176,12 @@ async def health() -> JSONResponse:
         )
 
 
-# @app.get("/stream-ping")
-# async def stream_ping():
-#     async def generator():
-#         for i in range(90):
-#             yield f"ping {i}\n".encode()
-#             await asyncio.sleep(1)
-
-#     return StreamingResponse(generator(), media_type="text/plain")
-
-
 @app.post("/generate")
 async def generate(request_data: RequestData) -> JSONResponse:
     """Create a generation task for the request.
 
     The request should be a JSON object with the following fields:
-    - prompts: the list of texts to use for the generation (str or list of chat message).
-    - use_chatml: whether to use chatml format for prompts
+    - prompts: the list of texts to use for the generation
     - sampling_params: the sampling parameters.
 
     It returns a JSON object:
@@ -199,9 +192,7 @@ async def generate(request_data: RequestData) -> JSONResponse:
 
     async def generate_task(task_id: str, request_data: RequestData):
         try:
-            logger.info(
-                f"➡️ New generation task {task_id} added (prompts={len(request_data.prompts)}, use_chatml={request_data.use_chatml})"
-            )
+            logger.info(f"➡️ New generation task {task_id} added ({len(request_data.prompts)} prompts)")
             if request_data.sampling_params:
                 logger.debug(f"Generation with custom params: {request_data.sampling_params}")
 
@@ -212,11 +203,11 @@ async def generate(request_data: RequestData) -> JSONResponse:
                     app.state.engine,
                     app.state.tokenizer,
                     request_data.prompts,
-                    request_data.use_chatml,
+                    request_data.chat_template_params,
                     request_data.sampling_params,
                 )
             await app.state.task_store.set_done(task_id, completions=completions)
-            logger.info(f"✅ Generation task {task_id} done.")
+            logger.info(f"✅ Generation task {task_id} done")
         except Exception as e:
             await app.state.task_store.set_error(task_id, error=str(e))
             logger.error(f"❌ Generation task {task_id} failed: {e}")
@@ -254,24 +245,37 @@ async def get_generate_task(task_id: str) -> ORJSONResponse:
     return ORJSONResponse(content=task.model_dump())
 
 
+def _apply_chat_template(tokenizer, prompts: list[str], chat_template_params: Dict[str, Any]) -> list[str]:
+    logger.debug(f"Formatting {len(prompts)} prompts")
+    if chat_template_params:
+        logger.debug(f"Custom formatting params: {chat_template_params}")
+
+    # Get instruction param
+    instruction = chat_template_params.pop("instruction") if "instruction" in chat_template_params else None
+    instruction = instruction or app.state.model_instruction
+
+    # Format prompts
+    formatted_prompts = [
+        tokenizer.apply_chat_template(
+            app.state.pipeline.construct_one_conversation(system=instruction, user=prompt),
+            tokenize=False,
+            add_generation_prompt=True,
+            **chat_template_params,
+        )
+        for prompt in prompts
+    ]
+    logger.debug(f"Formatted prompts: {formatted_prompts[0]}")
+
+    return formatted_prompts
+
+
 def _generate(
-    engine: LLM,
-    tokenizer,
-    prompts: list[Union[str, list[ChatMessage]]],
-    use_chatml: bool,
-    sampling_params: Dict[str, Any],
+    engine: LLM, tokenizer, prompts: list[str], chat_template_params: Dict[str, Any], sampling_params: Dict[str, Any]
 ) -> list[str]:
     logger.debug(f"Running generation on {len(prompts)} prompts...")
 
     # Format prompts
-    formatted_prompts = [
-        (
-            tokenizer.apply_chat_template(p, tokenize=False, add_generation_prompt=True)
-            if isinstance(p, list) and use_chatml
-            else p
-        )
-        for p in prompts
-    ]
+    formatted_prompts = _apply_chat_template(tokenizer, prompts, chat_template_params=chat_template_params)
 
     # Sampling params
     max_length = tokenizer.model_max_length

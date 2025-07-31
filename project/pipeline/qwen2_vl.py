@@ -4,7 +4,7 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, TEXT_FIELD
+from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -64,7 +64,7 @@ def load_model_and_processor(model_name: str):
     return model, processor
 
 
-def construct_one_conversation(system: str, user: str, template: str, assistant: str = None):
+def construct_one_conversation(system: str, user: str, assistant: str = None):
     """
     Construct a conversation from system, user and assistant messages
 
@@ -76,22 +76,28 @@ def construct_one_conversation(system: str, user: str, template: str, assistant:
 
     Returns a conversation object
     """
-    conversation = [
-        {"role": "system", "content": [{"type": "text", "text": system}]},
-        {"role": "user", "content": [{"type": "text", "text": f"# Template:\n{template}\n# Context:\n{user}"}]},
-    ]
+    conversation = []
+
+    # Add system prompt
+    if system:
+        conversation.append({"role": "system", "content": [{"type": "text", "text": system}]})
+
+    # Add user prompt
+    conversation.append({"role": "user", "content": [{"type": "text", "text": user}]})
+
+    # Add assistant prompt
     if assistant:
         conversation.append({"role": "assistant", "content": [{"type": "text", "text": f"{assistant}"}]})
+
     return conversation
 
 
-def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset:
+def construct_conversations(dataset: Dataset) -> Dataset:
     """
     Construct conversations style column for training
 
     Args:
     - dataset (Dataset): training dataset
-    - completion_column (str): completion column to use
 
     Returns the training dataset with a conversations column
     """
@@ -100,9 +106,8 @@ def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset
         return {
             "conversations": construct_one_conversation(
                 example[INSTRUCTION_FIELD],
-                example["input"],
-                example["template"],
-                example[completion_column],
+                example[INPUT_FIELD],
+                example[COMPLETION_FIELD],
             )
         }
 
@@ -236,7 +241,7 @@ def save_model(trainer, processor, output_model_name: str, output_dir: str):
     del processor
 
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
     """
     Qwen2_vl model training pipeline
 
@@ -245,7 +250,6 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
         output_model_name (str): model name to output
         output_dir (str): directory to output
         dataset (Dataset): training dataset
-        completion_column (str): completion column to use in training dataset
     """
     logger.info(f"▶️ Start qwen2_vl fine tuning pipeline")
 
@@ -253,7 +257,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     model, processor = load_model_and_processor(model_name)
 
     # Format dataset as conversations in new column
-    dataset = construct_conversations(dataset, completion_column=completion_column)
+    dataset = construct_conversations(dataset)
 
     # Train the model
     trainer = build_trainer(model, processor, dataset, output_dir)

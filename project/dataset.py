@@ -8,8 +8,10 @@ logger = get_logger(name=__name__)
 FOLDER = "datasets"
 
 TEXT_FIELD = "text"
-INSTRUCTION_FIELD = "instruction"
 INSTRUCTION_FILENAME = "instruction.txt"
+INSTRUCTION_FIELD = "instruction"
+INPUT_FIELD = "input"
+COMPLETION_FIELD = "completion"
 
 
 def get_file(object_name: str) -> str:

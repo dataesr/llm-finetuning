@@ -4,7 +4,7 @@ from peft import LoraConfig, AutoPeftModelForCausalLM
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, TEXT_FIELD, INSTRUCTION_FIELD
+from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -159,22 +159,28 @@ def construct_one_conversation(system: str, user: str, assistant: str = None):
 
     Returns a conversation object
     """
-    conversation = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    conversation = []
+
+    # Add system prompt
+    if system:
+        conversation.append({"role": "system", "content": system})
+
+    # Add user prompt
+    conversation.append({"role": "user", "content": user})
+
+    # Add assistant prompt
     if assistant:
         conversation.append({"role": "assistant", "content": assistant})
+
     return conversation
 
 
-def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset:
+def construct_conversations(dataset: Dataset) -> Dataset:
     """
-    Construct conversations style column for training
+    Construct conversations style column for training on a dataset
 
     Args:
     - dataset (Dataset): training dataset
-    - completion_column (str): completion column to use
 
     Returns the training dataset with a conversations column
     """
@@ -183,8 +189,8 @@ def construct_conversations(dataset: Dataset, completion_column: str) -> Dataset
         return {
             "conversations": construct_one_conversation(
                 example[INSTRUCTION_FIELD],
-                example["input"],
-                example[completion_column],
+                example[INPUT_FIELD],
+                example[COMPLETION_FIELD],
             )
         }
 
@@ -240,7 +246,8 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     del trainer
     del tokenizer
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, completion_column: str):
+
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
     """
     LLama model training pipeline
 
@@ -257,7 +264,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     model, tokenizer = load_model_and_tokenizer(model_name)
 
     # Format dataset as conversations in new column
-    dataset = construct_conversations(dataset, completion_column)
+    dataset = construct_conversations(dataset)
 
     # Train the model
     trainer = build_trainer(model, tokenizer, dataset, output_dir)

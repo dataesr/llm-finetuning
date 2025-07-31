@@ -21,16 +21,12 @@ def main():
         logger.debug(f"Start fine-tuning script with args {args}")
 
         output_model_name = model_train(
-            model_name=args.model_name,
-            output_model_name=args.output_model_name,
-            dataset_name=args.dataset_name,
-            completion_column=args.dataset_completion_column,
+            model_name=args.model_name, output_model_name=args.output_model_name, dataset_name=args.dataset_name
         )
 
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
-
-        # model_delete_dir(output_model_name)
+            model_delete_dir(output_model_name)
 
     # Upload model to hub
     elif args.mode == "push":
@@ -43,8 +39,7 @@ def main():
         logger.debug(f"Start pushing model to hugging face hub with args {args}")
 
         push_to_hub(args.output_model_name, args.hf_hub, args.hf_hub_private)
-
-        # model_delete_dir(args.output_model_name)
+        model_delete_dir(args.output_model_name)
 
     else:
         raise ValueError(f"Incorrect mode {args.mode}")

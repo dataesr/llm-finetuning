@@ -1,4 +1,5 @@
 from transformers import AutoConfig
+from huggingface_hub import hf_hub_download
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,3 +39,27 @@ def model_get_config(model_name: str, forced_config: str = None) -> str:
                 return CONFIG_DEFAULT[conf]
 
     logger.error(f"No config found for model {model_name} (type={model_type}, arch={model_arch})")
+
+
+def model_get_instruction(model_name: str) -> str:
+    """
+    Get instructions file from huggingface hub
+
+    Args:
+    - model_name (str): model repository
+
+    Returns instructions as str
+    """
+    # Download file
+    try:
+        file_path = hf_hub_download(repo_id=model_name, filename="instruction.txt", repo_type="model")
+    except Exception as error:
+        logger.warning(f"⚠️ Instruction not found for model {model_name}: {error}")
+        return None
+
+    # Read file
+    with open(file_path, "r", encoding="utf-8") as file:
+        instruction = file.read()
+
+    logger.debug(f"Found instruction for {model_name}: {instruction}")
+    return instruction
