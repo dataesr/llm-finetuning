@@ -194,7 +194,7 @@ def construct_conversations(dataset: Dataset) -> Dataset:
             )
         }
 
-    dataset = dataset.map(map_conversations)
+    dataset = dataset.map(map_conversations).select_columns(["instruction", "conversations"])
     logger.debug(f"✅ Dataset formatted with conversation format")
     logger.debug(f"Dataset columns: {dataset.column_names}")
     logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
@@ -256,7 +256,6 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
         output_model_name (str): model name to output
         output_dir (str): directory to output
         dataset (Dataset): training dataset
-        completion_column (str): completion column to use in training dataset
     """
     logger.info(f"▶️ Start llama fine tuning pipeline")
 

@@ -111,7 +111,7 @@ def construct_conversations(dataset: Dataset) -> Dataset:
             )
         }
 
-    dataset = dataset.map(map_conversations)
+    dataset = dataset.map(map_conversations).select_columns(["instruction", "conversations"])
     logger.debug(f"✅ Dataset formatted with conversation format")
     logger.debug(f"Dataset columns: {dataset.column_names}")
     logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
