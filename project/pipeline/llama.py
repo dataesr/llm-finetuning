@@ -1,6 +1,6 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig, AutoPeftModelForCausalLM
+from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 lora_r = 64  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
 lora_dropout = 0.1  # The dropout probability for Lora layers.
-lora_task_type = "CAUSAL_LM"
+lora_task_type = TaskType.CAUSAL_LM
 lora_target_modules = ["q_proj", "v_proj"]
 # For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
 

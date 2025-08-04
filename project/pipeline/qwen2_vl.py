@@ -1,13 +1,20 @@
-import os
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq
 from trl import SFTConfig, SFTTrainer
+from peft import LoraConfig, TaskType
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
 from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
+
+# LORA config (https://huggingface.co/docs/peft/package_reference/lora)
+lora_r = 64  # Lora attention dimension (the “rank”).
+lora_alpha = 16  # The alpha parameter for Lora scaling
+lora_dropout = 0.1  # The dropout probability for Lora layers.
+lora_task_type = TaskType.CAUSAL_LM
+lora_target_modules = ["q_proj", "v_proj"]
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
@@ -196,6 +203,15 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         # max_seq_length=max_seq_length,
     )
 
+    # Build lora config
+    peft_config = LoraConfig(
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        r=lora_r,
+        task_type=lora_task_type,
+        target_modules=lora_target_modules,
+    )
+
     # Build sft trainer
     trainer = SFTTrainer(
         model=model,
@@ -203,12 +219,13 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         processing_class=processor.tokenizer,
         args=training_args,
         # data_collator=data_collator,
+        peft_config=peft_config,
     )
 
     return trainer
 
 
-def save_model(trainer, processor, output_model_name: str, output_dir: str):
+def save_model(trainer, processor, output_model_name: str):
     """
     Save trained model and processor.
 
@@ -265,7 +282,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info("✅ Model trained")
 
     # Save the model
-    save_model(trainer, processor, output_model_name, output_dir)
+    save_model(trainer, processor, output_model_name)
 
     # Save the instruction
     save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
