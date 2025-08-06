@@ -6,16 +6,25 @@ logger = get_logger(__name__)
 
 FOLDER = "jobs"
 MERGED_FOLDER = "merged"
-CONFIG_DEFAULT = {"causallm": "llama", "vision2seq": "qwen2_vl"}
-CONFIG_ALL = ["llama", "qwen2_vl"]
+CONFIG_DEFAULT = {"causallm": "openchat", "vision2seq": "nuextract"}
+CONFIG_ALL = ["openchat", "nuextract"]
 
 
 def model_get_config(model_name: str, forced_config: str = None) -> str:
+    """
+    Get model config
+
+    Args:
+    - model_name (str): model name
+    - forced_config (str, optional): forced config. Defaults to None.
+
+    Returns the corresponding config for the model
+    """
     # Check if forced config exist
     if forced_config:
-        if forced_config in CONFIG_DEFAULT:
-            logger.warning(f"Model {model_name} config manually forced to {CONFIG_DEFAULT[forced_config]}")
-            return CONFIG_DEFAULT[forced_config]
+        if forced_config in CONFIG_ALL:
+            logger.warning(f"Model {model_name} config manually forced to {forced_config}")
+            return forced_config
         logger.warning(f"No forced config {forced_config} found")
 
     # Get config from model files

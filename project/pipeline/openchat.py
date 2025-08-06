@@ -10,9 +10,9 @@ from project.logger import get_logger
 logger = get_logger(__name__)
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
-lora_r = 64  # Lora attention dimension (the “rank”).
+lora_r = 8  # Lora attention dimension (the “rank”).
 lora_alpha = 16  # The alpha parameter for Lora scaling
-lora_dropout = 0.1  # The dropout probability for Lora layers.
+lora_dropout = 0.05  # The dropout probability for Lora layers.
 lora_task_type = TaskType.CAUSAL_LM
 lora_target_modules = ["q_proj", "v_proj"]
 # For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
@@ -25,9 +25,10 @@ bnb_4bit_compute_dtype = "float16"  # Computational type
 bnb_4bit_quant_type = "nf4"  # Quantization data type
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
-max_steps = 10  # Was originally trained on 3000 but better to keep the value low for test purposes.
-# Context window length. Llama can now technically push further, but I find attention is no longer working so well.
-max_seq_length = 8192
+max_steps = 200  # Was originally trained on 3000 but better to keep the value low for test purposes.
+max_seq_length = (
+    8192  # Context window length. Llama can now technically push further, but I find attention is no longer working so well.
+)
 num_train_epochs = 1  # Number of training epochs
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -90,16 +91,17 @@ def load_model_and_tokenizer(model_name: str):
 
     return model, tokenizer
 
+
 def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTrainer:
     """
     Build SFTTrainer for finetuning
-    
+
     Args:
     - model: model to finetune
     - tokenizer: tokenizer:
     - dataset: Dataset
     - output_dir: training output directory
-    
+
     Returns:
     - trainer: SFTTrainer
     """
@@ -226,10 +228,10 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Load and merge model
     model = AutoPeftModelForCausalLM.from_pretrained(
-            output_dir,
-            device_map="auto",  
-            torch_dtype=torch.bfloat16,
-        )
+        output_dir,
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+    )
     model = model.merge_and_unload()
 
     # Save final merged model
@@ -249,7 +251,7 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
     """
-    LLama model training pipeline
+    OpenChat model training pipeline
 
     Args:
         model_name (str): model to train
@@ -257,7 +259,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
         output_dir (str): directory to output
         dataset (Dataset): training dataset
     """
-    logger.info(f"▶️ Start llama fine tuning pipeline")
+    logger.info(f"▶️ Start OpenChat fine tuning pipeline")
 
     # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name)

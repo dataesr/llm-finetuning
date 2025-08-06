@@ -21,7 +21,10 @@ def main():
         logger.debug(f"Start fine-tuning script with args {args}")
 
         output_model_name = model_train(
-            model_name=args.model_name, output_model_name=args.output_model_name, dataset_name=args.dataset_name
+            model_name=args.model_name,
+            output_model_name=args.output_model_name,
+            dataset_name=args.dataset_name,
+            forced_config=args.forced_config,
         )
 
         if args.hf_hub:

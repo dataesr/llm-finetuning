@@ -35,7 +35,7 @@ def initialize(model_name: str, output_model_name=None) -> tuple:
     return output_model_name, output_dir
 
 
-def model_train(model_name: str, dataset_name: str, output_model_name: str = None) -> str:
+def model_train(model_name: str, dataset_name: str, output_model_name: str = None, forced_config: str = None) -> str:
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Initialize llm folder
@@ -45,7 +45,7 @@ def model_train(model_name: str, dataset_name: str, output_model_name: str = Non
     dataset = get_dataset(dataset_name)
 
     # Get pipeline
-    config = model_get_config(model_name)
+    config = model_get_config(model_name, forced_config)
     pipeline = importlib.import_module(f"project.pipeline.{config}")
 
     # Train model

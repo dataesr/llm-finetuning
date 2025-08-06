@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu24.04
 
 WORKDIR /
 
@@ -27,6 +27,7 @@ ENV PATH="./venv/bin:$PATH"
 
 # Install PyTorch for cuda 12.6
 RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
+
 # Install python packages
 COPY requirements.txt /workspace
 RUN pip install --upgrade pip && pip install -r requirements.txt --proxy=${HTTP_PROXY}
