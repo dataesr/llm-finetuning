@@ -6,7 +6,7 @@ logger = get_logger(__name__)
 
 FOLDER = "jobs"
 MERGED_FOLDER = "merged"
-CONFIG_DEFAULT = {"causallm": "openchat", "vision2seq": "nuextract"}
+CONFIG_DEFAULT = {"llama": "openchat", "qwen2_vl": "nuextract"}
 CONFIG_ALL = ["openchat", "nuextract"]
 
 
@@ -27,24 +27,33 @@ def model_get_config(model_name: str, forced_config: str = None) -> str:
             return forced_config
         logger.warning(f"No forced config {forced_config} found")
 
+    # Check if model name is a config
+    names = [n.split("-")[0].lower() for n in model_name.split("/")]
+    for name in names:
+        if name in CONFIG_ALL:
+            logger.warning(f"Model {model_name} config automatically set to {name}")
+            return name
+
     # Get config from model files
     config = AutoConfig.from_pretrained(model_name)
     if not config:
         logger.error(f"No remote config found for model {model_name}")
         raise ValueError(f"No remote config found for model {model_name}")
 
-    # Check if model type exists in config
+    # Check model type
     model_type = config.model_type
     logger.debug(f"Model {model_name} type = {model_type}")
-    if model_type in CONFIG_ALL:
-        return model_type
+    if model_type in CONFIG_DEFAULT:
+        logger.warning(f"Model {model_name} config automatically set to {CONFIG_DEFAULT[model_type]}")
+        return CONFIG_DEFAULT[model_type]
 
-    # Otherwise check model architecture
+    # Check model architecture
     model_arch = config.architectures[0]
     logger.debug(f"Model {model_name} architecture = {model_arch}")
     if model_arch and isinstance(model_arch, str):
         for conf in CONFIG_DEFAULT:
             if conf in model_arch.lower():
+                logger.warning(f"Model {model_name} config automatically set to {CONFIG_DEFAULT[conf]}")
                 return CONFIG_DEFAULT[conf]
 
     logger.error(f"No config found for model {model_name} (type={model_type}, arch={model_arch})")
