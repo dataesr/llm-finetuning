@@ -179,13 +179,13 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     return trainer
 
 
-def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
+def merge_and_save_model(model, tokenizer, output_model_name: str, output_dir: str):
     """
     Save trained model and tokenizer.
 
     Args:
-    - trainer: SFTTrainer
-    - tokenizer: Tokenizer to save
+    - model: model to save
+    - tokenizer: tokenizer to save
     - output_model_name (str): Name of the saved model
     - output_dir (str): Path to output directory
     """
@@ -231,7 +231,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
+    merge_and_save_model(model, tokenizer, output_model_name, output_dir=output_dir)
 
     # Save the instruction
     save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
