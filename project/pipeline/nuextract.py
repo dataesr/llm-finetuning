@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
-num_train_epochs = 3  # Number of training epochs
+num_train_epochs = 1  # Number of training epochs
 max_steps = -1  # Number of training steps
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
@@ -173,6 +173,9 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         optim=optim,
         save_steps=200,
         logging_steps=10,
+        logging_strategy="steps",
+        logging_first_step=True,
+        disable_tqdm=False,
         report_to=None,
         dataloader_pin_memory=False,
         # max_seq_length=max_seq_length,
