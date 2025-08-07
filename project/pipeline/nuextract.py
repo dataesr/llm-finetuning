@@ -31,12 +31,12 @@ bnb_config = BitsAndBytesConfig(
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 lora_config = LoraConfig(
     r=8,
-    lora_alpha=16,
-    lora_dropout=0.05,
+    lora_alpha=64,
+    lora_dropout=0.1,
     task_type=TaskType.CAUSAL_LM,
     bias="none",
-    # target_modules=["q_proj", "v_proj"],
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    target_modules=["q_proj", "v_proj"],
+    # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
 )
 
 
@@ -81,7 +81,6 @@ def load_model_and_processor(model_name: str):
     model = prepare_model_for_kbit_training(
         model, use_gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False}
     )
-    model = get_peft_model(model, lora_config)
 
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
     logger.debug(f"Tokenizer template: {processor.tokenizer.chat_template}")
@@ -167,7 +166,7 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         max_steps=max_steps,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        bf16=True,
+        fp16=True,
         max_grad_norm=0.3,
         warmup_ratio=0.03,
         optim=optim,
@@ -179,10 +178,13 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         report_to=None,
         dataloader_pin_memory=False,
         # max_seq_length=max_seq_length,
+        # packing = False,
     )
 
     # Build sft trainer
-    trainer = SFTTrainer(model=model, train_dataset=dataset, processing_class=processor.tokenizer, args=training_args)
+    trainer = SFTTrainer(
+        model=model, train_dataset=dataset, processing_class=processor.tokenizer, args=training_args, peft_config=lora_config
+    )
 
     return trainer
 

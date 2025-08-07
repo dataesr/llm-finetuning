@@ -209,7 +209,7 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
     """
-    OpenChat model training pipeline
+    Llama model training pipeline
 
     Args:
         model_name (str): model to train
@@ -217,7 +217,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
         output_dir (str): directory to output
         dataset (Dataset): training dataset
     """
-    logger.info(f"▶️ Start OpenChat fine tuning pipeline")
+    logger.info(f"▶️ Start Llama fine tuning pipeline")
 
     # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name)
