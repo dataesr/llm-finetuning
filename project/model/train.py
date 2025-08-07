@@ -1,5 +1,6 @@
 import os
 import importlib
+import torch
 from project.model.config import model_get_config, FOLDER
 from project.model.utils import model_default_output_name
 from project.dataset import get_dataset
@@ -37,6 +38,9 @@ def initialize(model_name: str, output_model_name=None) -> tuple:
 
 def model_train(model_name: str, dataset_name: str, output_model_name: str = None, forced_config: str = None) -> str:
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
+
+    # Cleanup
+    torch.cuda.empty_cache()
 
     # Initialize llm folder
     output_model_name, output_dir = initialize(model_name, output_model_name)

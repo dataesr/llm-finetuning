@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
 num_train_epochs = 1  # Number of training epochs
-max_steps = -1  # Number of training steps
+max_steps = 300  # Number of training steps, should be set to -1 for full training
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
 optim = "paged_adamw_8bit"
@@ -30,13 +30,13 @@ bnb_config = BitsAndBytesConfig(
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 lora_config = LoraConfig(
-    r=8,
-    lora_alpha=16,
-    lora_dropout=0.05,
+    r=16,
+    lora_alpha=64,
+    lora_dropout=0.1,
     task_type=TaskType.CAUSAL_LM,
     bias="none",
-    # target_modules=["q_proj", "v_proj"],
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    target_modules=["q_proj", "v_proj"],
+    # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
 )
 
 
@@ -72,7 +72,6 @@ def load_model_and_tokenizer(model_name: str):
     model = prepare_model_for_kbit_training(
         model, use_gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False}
     )
-    model = get_peft_model(model, lora_config)
 
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
     logger.debug(f"Tokenizer template: {tokenizer.chat_template}")
@@ -155,9 +154,11 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         max_steps=max_steps,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        bf16=True,
+        fp16=True,
         max_grad_norm=0.3,
         warmup_ratio=0.03,
+        group_by_length=True,
+        weight_decay=0.001,
         optim=optim,
         save_steps=200,
         logging_steps=10,
@@ -171,7 +172,9 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     )
 
     # Build sft trainer
-    trainer = SFTTrainer(model=model, train_dataset=dataset, processing_class=tokenizer, args=training_args)
+    trainer = SFTTrainer(
+        model=model, train_dataset=dataset, processing_class=tokenizer, args=training_args, peft_config=lora_config
+    )
 
     return trainer
 

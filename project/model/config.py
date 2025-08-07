@@ -6,8 +6,8 @@ logger = get_logger(__name__)
 
 FOLDER = "jobs"
 MERGED_FOLDER = "merged"
-CONFIG_DEFAULT = {"llama": "openchat", "qwen2_vl": "nuextract"}
-CONFIG_ALL = ["openchat", "nuextract"]
+CONFIG_DEFAULT = {"llama": "llama", "qwen2_vl": "nuextract"}
+CONFIG_ALL = ["llama", "nuextract"]
 
 
 def model_get_config(model_name: str, forced_config: str = None) -> str:
