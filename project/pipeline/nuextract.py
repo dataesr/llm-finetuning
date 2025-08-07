@@ -11,13 +11,14 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
-num_train_epochs = 1  # Number of training epochs
-max_steps = 200  # Number of training steps
+num_train_epochs = 3  # Number of training epochs
+max_steps = -1  # Number of training steps
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
 optim = "paged_adamw_8bit"
-learning_rate = 1e-5  # The initial learning rate for AdamW optimizer
+learning_rate = 2e-5  # The initial learning rate for AdamW optimizer
 lr_scheduler_type = "linear"  # Scheduler rate type
+max_seq_length = 8192  # Context window length. Llama can now technically push further
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
 bnb_config = BitsAndBytesConfig(
@@ -31,11 +32,11 @@ bnb_config = BitsAndBytesConfig(
 lora_config = LoraConfig(
     r=8,
     lora_alpha=16,
-    lora_dropout=0.1,
+    lora_dropout=0.05,
     task_type=TaskType.CAUSAL_LM,
     bias="none",
-    target_modules=["q_proj", "v_proj"],
-    # For a deeper fine tuning use ["q_proj", "v_proj", "k_proj", "gate_proj", "up_proj", "down_proj"]
+    # target_modules=["q_proj", "v_proj"],
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
 )
 
 
@@ -53,6 +54,16 @@ def load_model_and_processor(model_name: str):
 
     logger.info(f"Start loading model {model_name}")
 
+    # Load processor
+    processor = AutoProcessor.from_pretrained(
+        model_name,
+        trust_remote_code=True,
+        padding_side="right",  # make sure to set padding to right for training
+        use_fast=True,
+    )
+    processor.eos_token = processor.tokenizer.eos_token
+    processor.eos_token_id = processor.tokenizer.eos_token_id
+
     # Load model
     model = AutoModelForVision2Seq.from_pretrained(
         model_name,
@@ -64,23 +75,13 @@ def load_model_and_processor(model_name: str):
     )
     model.config.use_cache = False
     model.config.pretraining_tp = 1
-    model.config.pad_token_id = model.config.eos_token_id
+    model.config.pad_token_id = processor.tokenizer.eos_token_id
 
     # Prepare model for lora
     model = prepare_model_for_kbit_training(
         model, use_gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False}
     )
     model = get_peft_model(model, lora_config)
-
-    # Load processor
-    processor = AutoProcessor.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-        padding_side="right",  # make sure to set padding to right for training
-        use_fast=True,
-    )
-    processor.eos_token = processor.tokenizer.eos_token
-    processor.eos_token_id = processor.tokenizer.eos_token_id
 
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
     logger.debug(f"Tokenizer template: {processor.tokenizer.chat_template}")
@@ -164,14 +165,16 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
         learning_rate=learning_rate,
         lr_scheduler_type=lr_scheduler_type,
         max_steps=max_steps,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
+        per_device_train_batch_size=per_device_train_batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         bf16=True,
         max_grad_norm=0.3,
         warmup_ratio=0.03,
         optim=optim,
         save_steps=200,
         logging_steps=10,
+        report_to=None,
+        dataloader_pin_memory=False,
         # max_seq_length=max_seq_length,
     )
 

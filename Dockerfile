@@ -27,6 +27,7 @@ ENV PATH="./venv/bin:$PATH"
 
 # Install PyTorch for cuda 12.6
 RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --trusted-host download.pytorch.org
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # Install python packages
 COPY requirements.txt /workspace
