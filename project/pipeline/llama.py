@@ -179,31 +179,47 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     return trainer
 
 
-def merge_and_save_model(model, tokenizer, output_model_name: str, output_dir: str):
+def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
     """
     Save trained model and tokenizer.
 
     Args:
-    - model: model to save
+    - trainer: trainer
     - tokenizer: tokenizer to save
     - output_model_name (str): Name of the saved model
     - output_dir (str): Path to output directory
     """
     logger.info(f"Start saving model to {output_dir}")
 
-    # Merge LoRA adapters into base model
-    model = model.merge_and_unload()
+    # Get model from trainer
+    model = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+
+    # Check if it's actually a PEFT model
+    if hasattr(model, "merge_and_unload"):
+        # It's a PeftModel, merge normally
+        merged_model = model.merge_and_unload()
+    else:
+        # Fallback - just save the adapter weights
+        logger.warning("⚠️ Could not merge PEFT weights, saving adapter only")
+
+        # Save adapter weights
+        trainer.save_model(output_dir)
+        tokenizer.save_pretrained(output_dir)
+
+        logger.info(f"✅ Fine-tuned adapters saved to {output_dir}")
+        torch.cuda.empty_cache()
+        return
 
     # Save final merged model
     output_merged_dir = model_get_finetuned_dir(output_model_name)
-    model.save_pretrained(output_merged_dir, safe_serialization=True)
+    merged_model.save_pretrained(output_merged_dir, safe_serialization=True)
     tokenizer.save_pretrained(output_merged_dir)
 
     logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")
 
     # Cleanup
     torch.cuda.empty_cache()
-    del model
+    del merged_model
     del tokenizer
 
 
@@ -231,7 +247,7 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(model, tokenizer, output_model_name, output_dir=output_dir)
+    merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
 
     # Save the instruction
     save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
