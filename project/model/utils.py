@@ -38,6 +38,25 @@ def model_get_finetuned_dir(output_model_name:str, check:bool=False):
 
     return model_dir
 
+def model_get_extracted_dir(output_model_name:str, check:bool=False):
+    """
+    Get finetuned model folder
+
+    Args:
+    - output_model_name (str): Fine-tuned model name
+
+    Returns:
+    - model_dir (str): Fine-tuned model path
+    """
+    from project.model.config import FOLDER, EXTRACTED_FOLDER
+
+    model_dir = os.path.join(FOLDER, output_model_name, EXTRACTED_FOLDER)
+
+    if check and not os.path.isdir(model_dir):
+        raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
+
+    return model_dir
+
 def model_delete_dir(output_model_name: str):
     """
     Delete all model files

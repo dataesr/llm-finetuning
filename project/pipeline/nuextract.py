@@ -1,10 +1,17 @@
 import torch
-from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+from transformers import (
+    AutoProcessor,
+    AutoModelForVision2Seq,
+    AutoModelForCausalLM,
+    BitsAndBytesConfig,
+    Qwen2Config,
+    Qwen2ForCausalLM,
+)
 from trl import SFTConfig, SFTTrainer
-from peft import LoraConfig, TaskType, prepare_model_for_kbit_training, get_peft_model
+from peft import LoraConfig, TaskType, prepare_model_for_kbit_training
 from datasets import Dataset
-from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD
+from project.model.utils import model_get_finetuned_dir, model_get_extracted_dir
+from project.dataset import INPUT_FIELD, COMPLETION_FIELD, CHAT_TEMPLATE_FIELD, CONVERSATIONS_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,7 +25,7 @@ gradient_accumulation_steps = 4  # Number of steps before performing a backward/
 optim = "paged_adamw_8bit"
 learning_rate = 2e-5  # The initial learning rate for AdamW optimizer
 lr_scheduler_type = "linear"  # Scheduler rate type
-max_seq_length = 8192  # Context window length. Llama can now technically push further
+max_seq_length = 8192  # Context window length.
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
 bnb_config = BitsAndBytesConfig(
@@ -40,7 +47,128 @@ lora_config = LoraConfig(
 )
 
 
-def load_model_and_processor(model_name: str):
+def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_template=None):
+    """
+    Extract text-only model from vision model and save it
+
+    Args:
+    - vision_model_path (str): Path to vision model
+    - output_path (str): Path to save text-only model
+    - custom_chat_template (str): Custom chat template
+
+    Returns:
+    - text_model: Extracted text model
+    - tokenizer: Tokenizer with updated template
+    """
+    logger.info(f"Extracting text model from {vision_model_name}")
+
+    # Load vision model and processor (with quantization)
+    processor = AutoProcessor.from_pretrained(
+        vision_model_name,
+        trust_remote_code=True,
+        padding_side="right",
+        use_fast=True,
+    )
+
+    vision_model = AutoModelForVision2Seq.from_pretrained(
+        vision_model_name,
+        trust_remote_code=True,
+        # torch_dtype=torch.float16,
+        # quantization_config=bnb_config,
+        device_map="auto",
+    )
+
+    # Extract the language model (to cpu)
+    vision_model = vision_model.cpu()
+    language_model = vision_model.language_model.cpu()
+    lm_head = vision_model.lm_head.cpu()
+
+    logger.info(f"Extracted language_model: {type(language_model)}")
+    logger.info(f"Language model parameters: {language_model.num_parameters():,}")
+
+    # Extract config
+    text_config = vision_model.config.text_config
+
+    # Handle rope_scaling - filter out incompatible keys
+    rope_scaling = getattr(text_config, "rope_scaling", None)
+    if rope_scaling and isinstance(rope_scaling, dict):
+        # Remove mrope_section and other VL-specific rope scaling parameters
+        rope_scaling = {k: v for k, v in rope_scaling.items() if k not in ["mrope_section"]}
+        # If rope_scaling becomes empty or only has unsupported keys, set to None
+        if not rope_scaling or rope_scaling.get("rope_type") == "default":
+            rope_scaling = None
+
+    # Create a proper Qwen2Config from the text config
+    qwen2_config = Qwen2Config(
+        vocab_size=text_config.vocab_size,
+        hidden_size=text_config.hidden_size,
+        intermediate_size=text_config.intermediate_size,
+        num_hidden_layers=text_config.num_hidden_layers,
+        num_attention_heads=text_config.num_attention_heads,
+        num_key_value_heads=getattr(text_config, "num_key_value_heads", text_config.num_attention_heads),
+        hidden_act=text_config.hidden_act,
+        max_position_embeddings=text_config.max_position_embeddings,
+        initializer_range=text_config.initializer_range,
+        rms_norm_eps=text_config.rms_norm_eps,
+        use_cache=getattr(text_config, "use_cache", True),
+        tie_word_embeddings=getattr(text_config, "tie_word_embeddings", False),
+        rope_theta=getattr(text_config, "rope_theta", 10000.0),
+        rope_scaling=rope_scaling,
+        attention_dropout=getattr(text_config, "attention_dropout", 0.0),
+        use_sliding_window=getattr(text_config, "use_sliding_window", False),
+        max_window_layers=getattr(text_config, "max_window_layers", 28),
+        sliding_window=getattr(text_config, "sliding_window", None),
+    )
+
+    # Create a new Qwen2ForCausalLM model with the proper config (on CPU)
+    qwen2_model = Qwen2ForCausalLM(qwen2_config).cpu()
+
+    # Combine them with proper prefixes
+    qwen2_state_dict = {}
+    # Add text_model components with "model." prefix
+    for key, value in language_model.state_dict().items():
+        # Ensure tensor is on CPU
+        qwen2_state_dict[f"model.{key}"] = value.cpu() if hasattr(value, "cpu") else value
+    # Add lm_head components with "lm_head." prefix
+    for key, value in lm_head.state_dict().items():
+        # Ensure tensor is on CPU
+        qwen2_state_dict[f"lm_head.{key}"] = value.cpu() if hasattr(value, "cpu") else value
+
+    # Load the fixed state dict
+    qwen2_model.load_state_dict(qwen2_state_dict)
+
+    # Extract tokenizer and update chat template
+    tokenizer = processor.tokenizer
+
+    # Set simplified chat template (no image handling)
+    if custom_chat_template:
+        tokenizer.chat_template = custom_chat_template
+        logger.debug(f"Custom chat template: {custom_chat_template}")
+        logger.debug(f"Custom chat template: {tokenizer.chat_template}")
+        logger.info("✅ Applied custom chat template")
+
+    # Update tokenizer settings
+    tokenizer.eos_token = processor.tokenizer.eos_token
+    tokenizer.eos_token_id = processor.tokenizer.eos_token_id
+    tokenizer.padding_side = "right"
+
+    # Save the extracted text model and tokenizer
+    qwen2_model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
+
+    logger.info(f"✅ Text-only Qwen2 model saved to {output_dir}")
+
+    # Cleanup
+    del vision_model
+    del language_model
+    del lm_head
+    del qwen2_config
+    del qwen2_model
+
+    return tokenizer
+
+
+def load_model_and_processor(model_name: str, output_model_name: str, custom_chat_template=None):
     """
     Load model and processor
 
@@ -53,29 +181,24 @@ def load_model_and_processor(model_name: str):
     """
 
     logger.info(f"Start loading model {model_name}")
+    extracted_dir = model_get_extracted_dir(output_model_name)
+    tokenizer = extract_text_model_from_vision(model_name, extracted_dir, custom_chat_template)
 
-    # Load processor
-    processor = AutoProcessor.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-        padding_side="right",  # make sure to set padding to right for training
-        use_fast=True,
-    )
-    processor.eos_token = processor.tokenizer.eos_token
-    processor.eos_token_id = processor.tokenizer.eos_token_id
+    # Reload with quantization
+    torch.cuda.empty_cache()
 
-    # Load model
-    model = AutoModelForVision2Seq.from_pretrained(
-        model_name,
-        trust_remote_code=True,
+    model = AutoModelForCausalLM.from_pretrained(
+        extracted_dir,
         torch_dtype=torch.float16,
         quantization_config=bnb_config,
-        # attn_implementation="flash_attention_2",
         device_map="auto",
     )
+    logger.info("Reloaded text model with quantization")
+
+    # Configure for training
     model.config.use_cache = False
     model.config.pretraining_tp = 1
-    model.config.pad_token_id = processor.tokenizer.eos_token_id
+    model.config.pad_token_id = tokenizer.eos_token_id
 
     # Prepare model for lora
     model = prepare_model_for_kbit_training(
@@ -83,13 +206,13 @@ def load_model_and_processor(model_name: str):
     )
 
     logger.debug(f"Model embeddings size: {model.get_input_embeddings().weight.size(0)}")
-    logger.debug(f"Tokenizer template: {processor.tokenizer.chat_template}")
+    logger.debug(f"Tokenizer chat template: {tokenizer.chat_template}")
     logger.info(f"✅ Model and tokenizer loaded")
 
-    return model, processor
+    return model, tokenizer
 
 
-def construct_one_conversation(system: str, user: str, assistant: str = None):
+def construct_one_conversation(user: str, system: str = None, assistant: str = None):
     """
     Construct a conversation from system, user and assistant messages
 
@@ -105,14 +228,14 @@ def construct_one_conversation(system: str, user: str, assistant: str = None):
 
     # Add system prompt
     if system:
-        conversation.append({"role": "system", "content": [{"type": "text", "text": system}]})
+        conversation.append({"role": "system", "content": system})
 
     # Add user prompt
-    conversation.append({"role": "user", "content": [{"type": "text", "text": user}]})
+    conversation.append({"role": "user", "content": user})
 
     # Add assistant prompt
     if assistant:
-        conversation.append({"role": "assistant", "content": [{"type": "text", "text": f"{assistant}"}]})
+        conversation.append({"role": "assistant", "content": f"{assistant}"})
 
     return conversation
 
@@ -130,26 +253,26 @@ def construct_conversations(dataset: Dataset) -> Dataset:
     def map_conversations(example):
         return {
             "conversations": construct_one_conversation(
-                example[INSTRUCTION_FIELD],
-                example[INPUT_FIELD],
-                example[COMPLETION_FIELD],
+                # system=example[INSTRUCTION_FIELD],
+                user=example[INPUT_FIELD],
+                assistant=example[COMPLETION_FIELD],
             )
         }
 
-    dataset = dataset.map(map_conversations).select_columns(["instruction", "conversations"])
+    dataset = dataset.map(map_conversations).select_columns([CONVERSATIONS_FIELD])
     logger.debug(f"✅ Dataset formatted with conversation format")
     logger.debug(f"Dataset columns: {dataset.column_names}")
-    logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
+    logger.debug(f"Dataset conversations sample: {dataset[0][CONVERSATIONS_FIELD]}")
     return dataset
 
 
-def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTrainer:
+def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTrainer:
     """
     Build SFTTrainer for finetuning
 
     Args:
-    - model: model to finetune
-    - processor: processor
+    - model: text model
+    - tokenizer: tokenizer
     - dataset: Dataset
     - output_dir: training output directory
 
@@ -183,13 +306,13 @@ def build_trainer(model, processor, dataset: Dataset, output_dir: str) -> SFTTra
 
     # Build sft trainer
     trainer = SFTTrainer(
-        model=model, train_dataset=dataset, processing_class=processor.tokenizer, args=training_args, peft_config=lora_config
+        model=model, train_dataset=dataset, processing_class=tokenizer, args=training_args, peft_config=lora_config
     )
 
     return trainer
 
 
-def merge_and_save_model(trainer, processor, output_model_name: str, output_dir: str):
+def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
     """
     Save trained model and tokenizer.
 
@@ -214,7 +337,7 @@ def merge_and_save_model(trainer, processor, output_model_name: str, output_dir:
 
         # Save adapter weights
         trainer.save_model(output_dir)
-        processor.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
 
         logger.info(f"✅ Fine-tuned adapters saved to {output_dir}")
         torch.cuda.empty_cache()
@@ -223,14 +346,14 @@ def merge_and_save_model(trainer, processor, output_model_name: str, output_dir:
     # Save final merged model
     output_merged_dir = model_get_finetuned_dir(output_model_name)
     merged_model.save_pretrained(output_merged_dir, safe_serialization=True)
-    processor.save_pretrained(output_merged_dir)
+    tokenizer.save_pretrained(output_merged_dir)
 
     logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")
 
     # Cleanup
     torch.cuda.empty_cache()
     del merged_model
-    del processor
+    del tokenizer
 
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
@@ -246,18 +369,19 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info(f"▶️ Start NueExtract fine tuning pipeline")
 
     # Load the model and the processor
-    model, processor = load_model_and_processor(model_name)
+    model, tokenizer = load_model_and_processor(model_name, output_model_name, dataset[0].get(CHAT_TEMPLATE_FIELD))
 
     # Format dataset as conversations in new column
     dataset = construct_conversations(dataset)
+    logger.debug(f"Chat template sample: {tokenizer.apply_chat_template(dataset[0][CONVERSATIONS_FIELD], tokenize=False)}")
 
     # Train the model
-    trainer = build_trainer(model, processor, dataset, output_dir)
+    trainer = build_trainer(model, tokenizer, dataset, output_dir)
     trainer.train()
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, processor, output_model_name, output_dir=output_dir)
+    merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
 
     # Save the instruction
-    save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
+    # save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
