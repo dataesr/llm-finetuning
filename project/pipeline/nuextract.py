@@ -143,7 +143,6 @@ def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_te
     # Set simplified chat template (no image handling)
     if custom_chat_template:
         tokenizer.chat_template = custom_chat_template
-        logger.debug(f"Custom chat template: {custom_chat_template}")
         logger.debug(f"Custom chat template: {tokenizer.chat_template}")
         logger.info("✅ Applied custom chat template")
 
