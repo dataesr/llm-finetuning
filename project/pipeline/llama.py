@@ -196,8 +196,12 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Check if it's actually a PEFT model
     if hasattr(model, "merge_and_unload"):
-        # It's a PeftModel, merge normally
-        merged_model = model.merge_and_unload()
+        # It's a PeftModel, save adapters
+        model.save_pretrained(output_dir)
+        # Reload model
+        model = AutoPeftModelForCausalLM.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        # Merge model
+        model_merged = model.merge_and_unload()
     else:
         # Fallback - just save the adapter weights
         logger.warning("⚠️ Could not merge PEFT weights, saving adapter only")
@@ -212,7 +216,7 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Save final merged model
     output_merged_dir = model_get_finetuned_dir(output_model_name)
-    merged_model.save_pretrained(output_merged_dir, safe_serialization=True)
+    model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
     tokenizer.save_pretrained(output_merged_dir)
 
     logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")

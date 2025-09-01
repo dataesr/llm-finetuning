@@ -1,5 +1,6 @@
 import torch
 from transformers import (
+    AutoTokenizer,
     AutoProcessor,
     AutoModelForVision2Seq,
     AutoModelForCausalLM,
@@ -8,7 +9,7 @@ from transformers import (
     Qwen2ForCausalLM,
 )
 from trl import SFTConfig, SFTTrainer
-from peft import LoraConfig, TaskType, prepare_model_for_kbit_training
+from peft import LoraConfig, TaskType, prepare_model_for_kbit_training, AutoPeftModelForCausalLM
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir, model_get_extracted_dir
 from project.dataset import INPUT_FIELD, COMPLETION_FIELD, CHAT_TEMPLATE_FIELD, CONVERSATIONS_FIELD
@@ -47,14 +48,17 @@ lora_config = LoraConfig(
 )
 
 
-def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_template=None):
+def extract_text_model_from_vision(
+    vision_model_name, output_dir, custom_chat_template=None, base_text_tokenizer: str = "Qwen/Qwen2-7B"
+):
     """
     Extract text-only model from vision model and save it
 
     Args:
     - vision_model_path (str): Path to vision model
     - output_path (str): Path to save text-only model
-    - custom_chat_template (str): Custom chat template
+    - custom_chat_template: Custom chat template
+    - base_text_tokenizer (str): model for base tokenizer
 
     Returns:
     - text_model: Extracted text model
@@ -68,6 +72,10 @@ def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_te
         trust_remote_code=True,
         padding_side="right",
         use_fast=True,
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_text_tokenizer, trust_remote_code=True, padding_side="right", use_fast=True
     )
 
     vision_model = AutoModelForVision2Seq.from_pretrained(
@@ -137,9 +145,6 @@ def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_te
     # Load the fixed state dict
     qwen2_model.load_state_dict(qwen2_state_dict)
 
-    # Extract tokenizer and update chat template
-    tokenizer = processor.tokenizer
-
     # Set simplified chat template (no image handling)
     if custom_chat_template:
         tokenizer.chat_template = custom_chat_template
@@ -149,7 +154,6 @@ def extract_text_model_from_vision(vision_model_name, output_dir, custom_chat_te
     # Update tokenizer settings
     tokenizer.eos_token = processor.tokenizer.eos_token
     tokenizer.eos_token_id = processor.tokenizer.eos_token_id
-    tokenizer.padding_side = "right"
 
     # Save the extracted text model and tokenizer
     qwen2_model.save_pretrained(output_dir)
@@ -328,8 +332,12 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Check if it's actually a PEFT model
     if hasattr(model, "merge_and_unload"):
-        # It's a PeftModel, merge normally
-        merged_model = model.merge_and_unload()
+        # It's a PeftModel, save adapters
+        model.save_pretrained(output_dir)
+        # Reload model
+        model = AutoPeftModelForCausalLM.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        # Merge model
+        model_merged = model.merge_and_unload()
     else:
         # Fallback - just save the adapter weights
         logger.warning("⚠️ Could not merge PEFT weights, saving adapter only")
@@ -344,15 +352,13 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Save final merged model
     output_merged_dir = model_get_finetuned_dir(output_model_name)
-    merged_model.save_pretrained(output_merged_dir, safe_serialization=True)
+    model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
     tokenizer.save_pretrained(output_merged_dir)
 
     logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")
 
     # Cleanup
     torch.cuda.empty_cache()
-    del merged_model
-    del tokenizer
 
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
