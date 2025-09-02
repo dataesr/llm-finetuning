@@ -255,7 +255,7 @@ def construct_conversations(dataset: Dataset) -> Dataset:
 
     def map_conversations(example):
         return {
-            "conversations": construct_one_conversation(
+            CONVERSATIONS_FIELD: construct_one_conversation(
                 # system=example[INSTRUCTION_FIELD],
                 user=example[INPUT_FIELD],
                 assistant=example[COMPLETION_FIELD],

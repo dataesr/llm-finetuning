@@ -12,8 +12,8 @@ INSTRUCTION_FILENAME = "instruction.txt"
 INSTRUCTION_FIELD = "instruction"
 INPUT_FIELD = "input"
 COMPLETION_FIELD = "completion"
+CONVERSATIONS_FIELD = "messages"
 CHAT_TEMPLATE_FIELD = "chat_template"
-CONVERSATIONS_FIELD = "conversations"
 
 def get_file(object_name: str) -> str:
     """

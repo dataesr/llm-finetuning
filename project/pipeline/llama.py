@@ -1,10 +1,10 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD
+from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD, CONVERSATIONS_FIELD
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -118,17 +118,17 @@ def construct_conversations(dataset: Dataset) -> Dataset:
 
     def map_conversations(example):
         return {
-            "conversations": construct_one_conversation(
+            CONVERSATIONS_FIELD: construct_one_conversation(
                 example[INSTRUCTION_FIELD],
                 example[INPUT_FIELD],
                 example[COMPLETION_FIELD],
             )
         }
 
-    dataset = dataset.map(map_conversations).select_columns(["instruction", "conversations"])
+    dataset = dataset.map(map_conversations).select_columns([INSTRUCTION_FIELD, CONVERSATIONS_FIELD])
     logger.debug(f"✅ Dataset formatted with conversation format")
     logger.debug(f"Dataset columns: {dataset.column_names}")
-    logger.debug(f"Dataset conversations sample: {dataset[0]['conversations']}")
+    logger.debug(f"Dataset conversations sample: {dataset[0][CONVERSATIONS_FIELD]}")
     return dataset
 
 
@@ -223,8 +223,6 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
 
     # Cleanup
     torch.cuda.empty_cache()
-    del merged_model
-    del tokenizer
 
 
 def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
