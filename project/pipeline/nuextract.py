@@ -61,7 +61,6 @@ def extract_text_model_from_vision(
     - base_text_tokenizer (str): model for base tokenizer
 
     Returns:
-    - text_model: Extracted text model
     - tokenizer: Tokenizer with updated template
     """
     logger.info(f"Extracting text model from {vision_model_name}")
@@ -152,8 +151,8 @@ def extract_text_model_from_vision(
         logger.info("✅ Applied custom chat template")
 
     # Update tokenizer settings
-    tokenizer.eos_token = processor.tokenizer.eos_token
-    tokenizer.eos_token_id = processor.tokenizer.eos_token_id
+    # tokenizer.eos_token = processor.tokenizer.eos_token
+    # tokenizer.eos_token_id = processor.tokenizer.eos_token_id
 
     # Save the extracted text model and tokenizer
     qwen2_model.save_pretrained(output_dir)
@@ -171,16 +170,16 @@ def extract_text_model_from_vision(
     return tokenizer
 
 
-def load_model_and_processor(model_name: str, output_model_name: str, custom_chat_template=None):
+def load_model_and_tokenizer(model_name: str, output_model_name: str, custom_chat_template=None):
     """
-    Load model and processor
+    Load model and tokenizer
 
     Args:
     - model_name (str): Model to load
 
     Returns:
     - model: Loaded model
-    - processor: Loaded processor
+    - tokenizer: Loaded tokenizer
     """
 
     logger.info(f"Start loading model {model_name}")
@@ -373,8 +372,8 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     """
     logger.info(f"▶️ Start NueExtract fine tuning pipeline")
 
-    # Load the model and the processor
-    model, tokenizer = load_model_and_processor(model_name, output_model_name, dataset[0].get(CHAT_TEMPLATE_FIELD))
+    # Load the model and the tokenizer
+    model, tokenizer = load_model_and_tokenizer(model_name, output_model_name, dataset[0].get(CHAT_TEMPLATE_FIELD))
 
     # Format dataset as conversations in new column
     dataset = construct_conversations(dataset)

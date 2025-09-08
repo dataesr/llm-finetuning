@@ -39,6 +39,10 @@ lora_config = LoraConfig(
     # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
 )
 
+default_chat_template = """{{ bos_token }}{% for message in messages %}{% if message['role'] in ['user', 'assistant'] %}{% set content = '<|start_header_id|>GPT4 Correct ' + message['role'].title() + '<|end_header_id|>
+' + message['content'] | trim + '<|eot_id|>' %}{% elif message['role'] == 'system' %}{% set content = '<|start_header_id|>System<|end_header_id|>
+' + message['content'] | trim + '<|eot_id|>' %}{% else %}{{ raise_exception('Only user, assistant and system roles are supported!') }}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>GPT4 Correct Assistant<|end_header_id|>
+' }}{% endif %}"""
 
 def load_model_and_tokenizer(model_name: str):
     """
@@ -61,6 +65,10 @@ def load_model_and_tokenizer(model_name: str):
 
     tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
+
+    if not tokenizer.chat_template:
+        tokenizer.chat_template = default_chat_template
+        logger.debug(f"No tokenizer chat template found, default llama chat template applied")
 
     # Load model
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=bnb_config)
