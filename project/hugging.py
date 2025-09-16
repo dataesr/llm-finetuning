@@ -1,9 +1,30 @@
 import os
-from huggingface_hub import create_repo, upload_folder
+from huggingface_hub import create_repo, upload_folder, hf_hub_download
 from project.model.utils import model_get_finetuned_dir
 from project.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def download_file_from_hub(repo_id: str, filename: str, local_dir: str):
+    """
+    Downloads a specific file from a Hugging Face Hub repository.
+
+    Args:
+    - repo_id (str): The model repo ID on Hugging Face (e.g. "your-username/model-name")
+    - filename (str): The name of the file to download (e.g. "config.json", "pytorch_model.bin")
+    - local_dir (str): The local directory to save the downloaded file
+    """
+    logger.info(f"Start downloading {filename} from https://huggingface.co/{repo_id}")
+
+    # Download the file
+    local_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        local_dir=local_dir,
+    )
+    logger.info(f"✅ File downloaded to {local_path}")
+    return local_path
 
 
 def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
