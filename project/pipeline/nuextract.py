@@ -66,12 +66,12 @@ def extract_text_model_from_vision(
     logger.info(f"Extracting text model from {vision_model_name}")
 
     # Load vision model and processor (with quantization)
-    processor = AutoProcessor.from_pretrained(
-        vision_model_name,
-        trust_remote_code=True,
-        padding_side="right",
-        use_fast=True,
-    )
+    # processor = AutoProcessor.from_pretrained(
+    #     vision_model_name,
+    #     trust_remote_code=True,
+    #     padding_side="right",
+    #     use_fast=True,
+    # )
 
     tokenizer = AutoTokenizer.from_pretrained(
         base_text_tokenizer, trust_remote_code=True, padding_side="right", use_fast=True
@@ -360,7 +360,7 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     torch.cuda.empty_cache()
 
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, **kwargs):
     """
     NueExtract model training pipeline
 
@@ -373,7 +373,8 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info(f"▶️ Start NueExtract fine tuning pipeline")
 
     # Load the model and the tokenizer
-    model, tokenizer = load_model_and_tokenizer(model_name, output_model_name, dataset[0].get(CHAT_TEMPLATE_FIELD))
+    custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
+    model, tokenizer = load_model_and_tokenizer(model_name, output_model_name, custom_chat_template=custom_chat_template)
 
     # Format dataset as conversations in new column
     dataset = construct_conversations(dataset)

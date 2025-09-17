@@ -3,7 +3,7 @@ import importlib
 import torch
 from project.model.config import model_get_config, FOLDER
 from project.model.utils import model_default_output_name
-from project.dataset import get_dataset
+from project.dataset import get_dataset, get_dataset_extras
 from project._utils import reset_folder
 from project.logger import get_logger
 
@@ -47,6 +47,7 @@ def model_train(model_name: str, dataset_name: str, output_model_name: str = Non
 
     # Load dataset
     dataset = get_dataset(dataset_name)
+    dataset_extras = get_dataset_extras(dataset_name)
 
     # Get pipeline
     config = model_get_config(model_name, forced_config)
@@ -57,7 +58,8 @@ def model_train(model_name: str, dataset_name: str, output_model_name: str = Non
         model_name=model_name,
         output_model_name=output_model_name,
         output_dir=output_dir,
-        dataset=dataset
+        dataset=dataset,
+        dataset_extras=dataset_extras,
     )
 
     logger.info(f"Fine tuning of model {model_name} done")

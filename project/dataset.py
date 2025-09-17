@@ -1,6 +1,6 @@
 import os
-import json
 from datasets import load_dataset, Dataset
+from project.hugging import get_json_from_hub
 from project.logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -74,6 +74,20 @@ def get_dataset(object_name: str) -> Dataset:
         raise Exception(f"Error while loading {object_name}")
 
     return dataset
+
+
+def get_dataset_extras(repo_id: str) -> dict:
+    """
+    Get extras from huggingface dataset
+
+    Args:
+        repo_id (str): Huggingface dataset repository
+    Returns:
+        extras (dict): extras json data
+    """
+    extras = get_json_from_hub(filename="extras.json", repo_id=repo_id, repo_type="dataset")
+    logger.debug(f"extras: {extras}")
+    return extras
 
 
 def save_dataset_instruction(dataset: Dataset, destination: str):

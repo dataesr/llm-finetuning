@@ -233,7 +233,7 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
     torch.cuda.empty_cache()
 
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset):
+def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, **kwargs):
     """
     Llama model training pipeline
 

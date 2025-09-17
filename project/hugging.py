@@ -1,4 +1,5 @@
 import os
+import json
 from huggingface_hub import create_repo, upload_folder, hf_hub_download
 from project.model.utils import model_get_finetuned_dir
 from project.logger import get_logger
@@ -6,13 +7,14 @@ from project.logger import get_logger
 logger = get_logger(__name__)
 
 
-def download_file_from_hub(repo_id: str, filename: str, local_dir: str):
+def download_file_from_hub(filename: str, repo_id: str, repo_type: str, local_dir: str):
     """
     Downloads a specific file from a Hugging Face Hub repository.
 
     Args:
     - repo_id (str): The model repo ID on Hugging Face (e.g. "your-username/model-name")
     - filename (str): The name of the file to download (e.g. "config.json", "pytorch_model.bin")
+    - repo_type (str): Huggingface repo type: model or dataset
     - local_dir (str): The local directory to save the downloaded file
     """
     logger.info(f"Start downloading {filename} from https://huggingface.co/{repo_id}")
@@ -20,11 +22,31 @@ def download_file_from_hub(repo_id: str, filename: str, local_dir: str):
     # Download the file
     local_path = hf_hub_download(
         repo_id=repo_id,
+        repo_type=repo_type,
         filename=filename,
         local_dir=local_dir,
     )
     logger.info(f"✅ File downloaded to {local_path}")
     return local_path
+
+
+def get_json_from_hub(filename: str, repo_id: str, repo_type: str):
+    json_data = None
+
+    if not filename.endswith(".json"):
+        logger.debug(f"{filename} not a json file; cancel download.")
+        return json_data
+
+    try:
+        json_path = download_file_from_hub(filename=filename, repo_id=repo_id, repo_type=repo_type, local_dir=None)
+        with open(json_path, "r") as json_file:
+            json_data = json.load(json_file)
+    except Exception as error:
+        logger.error(f"Error downloading {filename} from {repo_id}")
+        return json_data
+
+    logger.debug(f"Successfully loaded {filename} from {repo_id}")
+    return json_data
 
 
 def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
