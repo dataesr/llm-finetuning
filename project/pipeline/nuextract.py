@@ -1,7 +1,6 @@
 import torch
 from transformers import (
     AutoTokenizer,
-    AutoProcessor,
     AutoModelForVision2Seq,
     AutoModelForCausalLM,
     BitsAndBytesConfig,
@@ -12,7 +11,14 @@ from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig, TaskType, prepare_model_for_kbit_training, AutoPeftModelForCausalLM
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir, model_get_extracted_dir
-from project.dataset import INPUT_FIELD, COMPLETION_FIELD, CHAT_TEMPLATE_FIELD, CONVERSATIONS_FIELD
+from project.dataset import (
+    save_dataset_instruction,
+    INSTRUCTION_FIELD,
+    INPUT_FIELD,
+    COMPLETION_FIELD,
+    CHAT_TEMPLATE_FIELD,
+    CONVERSATIONS_FIELD,
+)
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -242,12 +248,13 @@ def construct_one_conversation(user: str, system: str = None, assistant: str = N
     return conversation
 
 
-def construct_conversations(dataset: Dataset) -> Dataset:
+def construct_conversations(dataset: Dataset, custom_instruction: str = None) -> Dataset:
     """
     Construct conversations style column for training
 
     Args:
     - dataset (Dataset): training dataset
+    - custom_instruction (str): custom system prompt
 
     Returns the training dataset with a conversations column
     """
@@ -255,7 +262,7 @@ def construct_conversations(dataset: Dataset) -> Dataset:
     def map_conversations(example):
         return {
             CONVERSATIONS_FIELD: construct_one_conversation(
-                # system=example[INSTRUCTION_FIELD],
+                system=custom_instruction,
                 user=example[INPUT_FIELD],
                 assistant=example[COMPLETION_FIELD],
             )
@@ -373,11 +380,12 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info(f"▶️ Start NueExtract fine tuning pipeline")
 
     # Load the model and the tokenizer
+    custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
     custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
     model, tokenizer = load_model_and_tokenizer(model_name, output_model_name, custom_chat_template=custom_chat_template)
 
     # Format dataset as conversations in new column
-    dataset = construct_conversations(dataset)
+    dataset = construct_conversations(dataset, custom_instruction=custom_instruction)
     logger.debug(f"Chat template sample: {tokenizer.apply_chat_template(dataset[0][CONVERSATIONS_FIELD], tokenize=False)}")
 
     # Train the model

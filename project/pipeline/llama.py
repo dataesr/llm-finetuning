@@ -4,7 +4,14 @@ from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_f
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
-from project.dataset import save_dataset_instruction, INSTRUCTION_FIELD, INPUT_FIELD, COMPLETION_FIELD, CONVERSATIONS_FIELD
+from project.dataset import (
+    save_dataset_instruction,
+    INSTRUCTION_FIELD,
+    INPUT_FIELD,
+    COMPLETION_FIELD,
+    CHAT_TEMPLATE_FIELD,
+    CONVERSATIONS_FIELD,
+)
 from project.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,17 +46,16 @@ lora_config = LoraConfig(
     # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
 )
 
-default_chat_template = """{{ bos_token }}{% for message in messages %}{% if message['role'] in ['user', 'assistant'] %}{% set content = '<|start_header_id|>GPT4 Correct ' + message['role'].title() + '<|end_header_id|>
-' + message['content'] | trim + '<|eot_id|>' %}{% elif message['role'] == 'system' %}{% set content = '<|start_header_id|>System<|end_header_id|>
-' + message['content'] | trim + '<|eot_id|>' %}{% else %}{{ raise_exception('Only user, assistant and system roles are supported!') }}{% endif %}{{ content }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>GPT4 Correct Assistant<|end_header_id|>
-' }}{% endif %}"""
+default_chat_template = "{%- for message in messages -%}\n    {#--- Handle User Messages with Template ---#}\n    {%- if message['role'] == 'user' -%}\n        {%- if loop.first -%}\n            {{- '<|im_start|>system\n' }}\n            {{- 'You are NuExtract, an information extraction tool created by NuMind.\n' }}\n            {{- '<|im_end|>\n' }}\n        {%- endif -%}\n        {{- '<|im_start|>' + message['role'] + '\n' }}\n        {{- message['content'] | trim }}\n        {{- '\n<|im_end|>\n' }}\n    {#--- Handle All Other Messages (Assistant, System, etc.) ---#}\n    {%- else -%}\n        {{- '<|im_start|>' + message['role'] + '\n' }}\n        {{- message['content'] | trim }}\n        {%- if loop.last and message['role'] == 'assistant' -%}\n            {{- '\n<|endoftext|>' }}\n        {%- else -%}\n            {{- '\n<|im_end|>\n' }}\n        {%- endif -%}\n    {%- endif -%}\n{%- endfor -%}\n{#--- Add Generation Prompt if Requested ---#}\n{%- if add_generation_prompt -%}\n    {{- '<|im_start|>assistant' }}\n{%- endif -%}"
 
-def load_model_and_tokenizer(model_name: str):
+
+def load_model_and_tokenizer(model_name: str, custom_chat_template=None):
     """
     Load pretrained causal model from huggingface
 
     Args:
     - model_name (str): Model to load
+    - custom_chat_template: Custom chat template
 
     Returns:
     - model: Loaded model
@@ -65,6 +71,11 @@ def load_model_and_tokenizer(model_name: str):
 
     tokenizer.padding_side = "right"  # to prevent warnings
     tokenizer.pad_token = tokenizer.eos_token
+
+    if custom_chat_template:
+        tokenizer.chat_template = custom_chat_template
+        logger.debug(f"Custom chat template: {tokenizer.chat_template}")
+        logger.info("✅ Applied custom chat template")
 
     if not tokenizer.chat_template:
         tokenizer.chat_template = default_chat_template
@@ -86,6 +97,7 @@ def load_model_and_tokenizer(model_name: str):
     logger.info(f"✅ Model and tokenizer loaded")
 
     return model, tokenizer
+
 
 def construct_one_conversation(system: str, user: str, assistant: str = None):
     """
@@ -114,12 +126,13 @@ def construct_one_conversation(system: str, user: str, assistant: str = None):
     return conversation
 
 
-def construct_conversations(dataset: Dataset) -> Dataset:
+def construct_conversations(dataset: Dataset, custom_instruction: str = None) -> Dataset:
     """
     Construct conversations style column for training on a dataset
 
     Args:
     - dataset (Dataset): training dataset
+    - custom_instruction (str): custom system prompt
 
     Returns the training dataset with a conversations column
     """
@@ -127,9 +140,9 @@ def construct_conversations(dataset: Dataset) -> Dataset:
     def map_conversations(example):
         return {
             CONVERSATIONS_FIELD: construct_one_conversation(
-                example[INSTRUCTION_FIELD],
-                example[INPUT_FIELD],
-                example[COMPLETION_FIELD],
+                system=custom_instruction,
+                user=example[INPUT_FIELD],
+                assistant=example[COMPLETION_FIELD],
             )
         }
 
@@ -246,10 +259,12 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info(f"▶️ Start Llama fine tuning pipeline")
 
     # Load the model and the tokenizer
-    model, tokenizer = load_model_and_tokenizer(model_name)
+    custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
+    custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
+    model, tokenizer = load_model_and_tokenizer(model_name, custom_chat_template=custom_chat_template)
 
     # Format dataset as conversations in new column
-    dataset = construct_conversations(dataset)
+    dataset = construct_conversations(dataset, custom_instruction=custom_instruction)
 
     # Train the model
     trainer = build_trainer(model, tokenizer, dataset, output_dir)
