@@ -128,8 +128,11 @@ async def lifespan(app: FastAPI):
     tokenizer = get_tokenizer(model_name, trust_remote_code=True)
     if not tokenizer:
         logger.error(f"❌ Tokenizer not loaded!")
-    logger.info(f"✅ Tokenizer loaded")
+    if not tokenizer.chat_template:
+        logger.debug(f"No chat template found for {model_name} tokenizer, applying default..")
+        tokenizer.chat_template = app.state.pipeline.default_chat_template
     app.state.tokenizer = tokenizer
+    logger.info(f"✅ Tokenizer loaded")
 
     # Initialize task store
     app.state.task_store = TaskStore()
