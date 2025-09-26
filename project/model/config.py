@@ -7,7 +7,7 @@ logger = get_logger(__name__)
 FOLDER = "jobs"
 MERGED_FOLDER = "merged"
 EXTRACTED_FOLDER = "extracted"
-CONFIG_DEFAULT = {"llama": "llama", "qwen2": "llama", "qwen2_vl": "nuextract"}
+CONFIG_DEFAULT = {"llama": "llama", "qwen2": "llama", "smolm3": "llama", "qwen2_vl": "nuextract"}
 CONFIG_ALL = ["llama", "nuextract"]
 
 

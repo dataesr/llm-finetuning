@@ -53,6 +53,8 @@ lora_config = LoraConfig(
     # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
 )
 
+default_chat_template = "{%- for message in messages -%}\n    {#--- Handle User Messages with Template ---#}\n    {%- if message['role'] == 'user' -%}\n        {%- if loop.first -%}\n            {{- '<|im_start|>system\n' }}\n            {{- 'You are NuExtract, an information extraction tool created by NuMind.\n' }}\n            {{- '<|im_end|>\n' }}\n        {%- endif -%}\n        {{- '<|im_start|>' + message['role'] }}\n        {{- '\n# Template:\n' }}\n        {{- '{\"entities\": [{\"entity\": \"verbatim-string\", \"entity_type\": [\"RESEARCH_INFRASTRUCTURE\", \"FUNDER\", \"PRIVATE_COMPANY\"], \"grant_ids\": [\"verbatim-string\"], \"grant_programs\": [\"verbatim-string\"], \"other_ids\": [\"verbatim-string\"]}]}' }}\n        {{- '\n# Input:\n' }}\n        {{- message['content'] | trim }}\n        {{- '\n<|im_end|>\n' }}\n    {#--- Handle All Other Messages (Assistant, System, etc.) ---#}\n    {%- else -%}\n        {{- '<|im_start|>' + message['role'] + '\n' }}\n        {{- message['content'] | trim }}\n        {%- if loop.last and message['role'] == 'assistant' -%}\n            {{- '\n<|endoftext|>' }}\n        {%- else -%}\n            {{- '\n<|im_end|>\n' }}\n        {%- endif -%}\n    {%- endif -%}\n{%- endfor -%}\n{#--- Add Generation Prompt if Requested ---#}\n{%- if add_generation_prompt -%}\n    {{- '<|im_start|>assistant' }}\n{%- endif -%}"
+
 
 def extract_text_model_from_vision(
     vision_model_name, output_dir, custom_chat_template=None, base_text_tokenizer: str = "Qwen/Qwen2-7B"
