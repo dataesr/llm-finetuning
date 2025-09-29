@@ -131,6 +131,7 @@ async def lifespan(app: FastAPI):
     if not tokenizer.chat_template:
         logger.debug(f"No chat template found for {model_name} tokenizer, applying default..")
         tokenizer.chat_template = app.state.pipeline.default_chat_template
+    logger.debug(f"Model chat_template={tokenizer.chat_template}")
     app.state.tokenizer = tokenizer
     logger.info(f"✅ Tokenizer loaded")
 
@@ -256,6 +257,12 @@ def _apply_chat_template(tokenizer, prompts: list[str], chat_template_params: Di
     # Get instruction param
     instruction = chat_template_params.pop("instruction") if "instruction" in chat_template_params else None
     instruction = instruction or app.state.model_instruction
+
+    # Get chat template param
+    chat_template = chat_template_params.pop("chat_template") if "chat_template" in chat_template_params else None
+    if chat_template:
+        tokenizer.chat_template = chat_template
+        logger.debug(f"Replace chat template : {tokenizer.chat_template}")
 
     # Format prompts
     formatted_prompts = [
