@@ -115,9 +115,9 @@ async def lifespan(app: FastAPI):
         model=model_name,
         quantization="bitsandbytes",
         dtype="half",
-        tensor_parallel_size=torch.cuda.device_count(),
+        tensor_parallel_size=1,  # torch.cuda.device_count()
         trust_remote_code=True,
-        enforce_eager=True,
+        # enforce_eager=True,
         disable_custom_all_reduce=True,
         disable_log_stats=False,
     )
