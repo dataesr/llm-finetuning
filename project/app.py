@@ -114,18 +114,20 @@ async def lifespan(app: FastAPI):
     app.state.engine = LLM(
         model=model_name,
         quantization="bitsandbytes",
-        dtype="half",
+        dtype="bfloat16",
         tensor_parallel_size=1,  # torch.cuda.device_count()
         trust_remote_code=True,
         # enforce_eager=True,
         disable_custom_all_reduce=True,
         disable_log_stats=False,
+        # max_model_len=8192,
     )
     logger.info(f"✅ vLLM engine {VLLM_VERSION} loaded")
     app.state.engine_lock = asyncio.Lock()
 
     # Initialize tokenizer
     tokenizer = get_tokenizer(model_name, trust_remote_code=True)
+    tokenizer.padding_side = "right"
     if not tokenizer:
         logger.error(f"❌ Tokenizer not loaded!")
     if not tokenizer.chat_template:
