@@ -14,6 +14,7 @@ INPUT_FIELD = "input"
 COMPLETION_FIELD = "completion"
 CONVERSATIONS_FIELD = "messages"
 CHAT_TEMPLATE_FIELD = "chat_template"
+TEXT_FORMAT_FIELD = "text_format"
 
 def get_file(object_name: str) -> str:
     """

@@ -39,14 +39,15 @@ ENV PATH=".venv/bin:${PATH}"
 RUN uv pip install vllm==0.10.2 --torch-backend=cu128
 
 # Install python packages
-COPY requirements.txt /workspace
+COPY inference/requirements.txt /workspace
 RUN uv pip install -r requirements.txt
 
 # Clean cache
 RUN uv cache clean
 
 # Add all files to workpspace
-ADD . /workspace
+ADD project /workspace/project
+ADD inference /workspace/project
 
 # Clean cache and make sure user as rights
 # RUN uv cache clean && chown -R 42420:42420 /workspace/.cache

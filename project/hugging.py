@@ -26,7 +26,7 @@ def download_file_from_hub(filename: str, repo_id: str, repo_type: str, local_di
         filename=filename,
         local_dir=local_dir,
     )
-    logger.info(f"✅ File downloaded to {local_path}")
+    # logger.info(f"✅ File downloaded to {local_path}")
     return local_path
 
 

@@ -9,9 +9,10 @@ from project.dataset import (
     INSTRUCTION_FIELD,
     INPUT_FIELD,
     COMPLETION_FIELD,
-    CHAT_TEMPLATE_FIELD,
     CONVERSATIONS_FIELD,
+    CHAT_TEMPLATE_FIELD,
     TEXT_FIELD,
+    TEXT_FORMAT_FIELD,
 )
 from project.logger import get_logger
 
@@ -76,10 +77,6 @@ def load_model_and_tokenizer(model_name: str, custom_chat_template=None):
         tokenizer.chat_template = custom_chat_template
         logger.debug(f"Custom chat template: {tokenizer.chat_template}")
         logger.info("✅ Applied custom chat template")
-
-    if not tokenizer.chat_template:
-        tokenizer.chat_template = default_chat_template
-        logger.debug(f"No tokenizer chat template found, default llama chat template applied")
 
     # Load model
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=bnb_config)
@@ -276,7 +273,8 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
 
     # Load the model and the tokenizer
     custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
-    custom_text_format = kwargs.get("dataset_extras", {}).get("text_format")
+    custom_text_format = kwargs.get("dataset_extras", {}).get(TEXT_FORMAT_FIELD)
+    custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
 
     model, tokenizer = load_model_and_tokenizer(model_name, custom_chat_template=custom_chat_template)
     use_conversational_format = tokenizer.chat_template is not None  # use conversational format for instruct models
