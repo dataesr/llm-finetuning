@@ -11,6 +11,7 @@ from project.dataset import (
     COMPLETION_FIELD,
     CHAT_TEMPLATE_FIELD,
     CONVERSATIONS_FIELD,
+    TEXT_FIELD,
 )
 from project.logger import get_logger
 
@@ -18,8 +19,8 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 # https://github.com/numindai/nuextract/blob/main/cookbooks/nuextract-2.0_sft.ipynb
-num_train_epochs = 1  # Number of training epochs
-max_steps = 300  # Number of training steps, should be set to -1 for full training
+num_train_epochs = 3  # Number of training epochs
+max_steps = -1  # Number of training steps, should be set to -1 for full training
 per_device_train_batch_size = 1  # Batch size per device during training. Optimal given our GPU vram.
 gradient_accumulation_steps = 4  # Number of steps before performing a backward/update pass
 optim = "paged_adamw_8bit"
@@ -32,7 +33,7 @@ bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=False,
-    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_compute_dtype=torch.bfloat16,
 )
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
@@ -42,12 +43,11 @@ lora_config = LoraConfig(
     lora_dropout=0.1,
     task_type=TaskType.CAUSAL_LM,
     bias="none",
-    target_modules=["q_proj", "v_proj"],
-    # target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], # for full training
+    # target_modules=["q_proj", "v_proj"],
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # for full training
 )
 
-default_chat_template = "{%- for message in messages -%}\n    {#--- Handle User Messages with Template ---#}\n    {%- if message['role'] == 'user' -%}\n        {%- if loop.first -%}\n            {{- '<|im_start|>system\n' }}\n            {{- 'You are an helpful assistant.\n' }}\n            {{- '<|im_end|>\n' }}\n        {%- endif -%}\n        {{- '<|im_start|>' + message['role'] + '\n' }}\n        {{- message['content'] | trim }}\n        {{- '\n<|im_end|>\n' }}\n    {#--- Handle All Other Messages (Assistant, System, etc.) ---#}\n    {%- else -%}\n        {{- '<|im_start|>' + message['role'] + '\n' }}\n        {{- message['content'] | trim }}\n        {%- if loop.last and message['role'] == 'assistant' -%}\n            {{- '\n<|endoftext|>' }}\n        {%- else -%}\n            {{- '\n<|im_end|>\n' }}\n        {%- endif -%}\n    {%- endif -%}\n{%- endfor -%}\n{#--- Add Generation Prompt if Requested ---#}\n{%- if add_generation_prompt -%}\n    {{- '<|im_start|>assistant' }}\n{%- endif -%}"
-
+default_text_format = "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{response}"
 
 def load_model_and_tokenizer(model_name: str, custom_chat_template=None):
     """
@@ -126,30 +126,46 @@ def construct_one_conversation(system: str, user: str, assistant: str = None):
     return conversation
 
 
-def construct_conversations(dataset: Dataset, custom_instruction: str = None) -> Dataset:
+def construct_prompts(
+    dataset: Dataset,
+    custom_instruction: str = None,
+    custom_text_format: str = None,
+    use_conversational_format: bool = False,
+) -> Dataset:
     """
-    Construct conversations style column for training on a dataset
+    Construct prompts for training on a dataset
 
     Args:
     - dataset (Dataset): training dataset
     - custom_instruction (str): custom system prompt
+    - custom_text_format (str): custom text format
+    - use_conversational_format (bool): if True, use conversational format
 
     Returns the training dataset with a conversations column
     """
+    prompts_field = CONVERSATIONS_FIELD if use_conversational_format else TEXT_FIELD
 
     def map_conversations(example):
-        return {
-            CONVERSATIONS_FIELD: construct_one_conversation(
-                system=custom_instruction,
-                user=example[INPUT_FIELD],
-                assistant=example[COMPLETION_FIELD],
-            )
-        }
+        if use_conversational_format:
+            # Conversational format (list of messages, ChatML-like)
+            return {
+                prompts_field: construct_one_conversation(
+                    system=custom_instruction,
+                    user=example[INPUT_FIELD],
+                    assistant=example[COMPLETION_FIELD],
+                )
+            }
+        else:
+            # Non-conversational (Alpaca-style prompt-response text)
+            instruction = custom_instruction or "You are an helpful assistant."
+            text_format = custom_text_format if custom_text_format else default_text_format
+            text = text_format.format(instruction, example[INPUT_FIELD], example[COMPLETION_FIELD])
+            return {prompts_field: text}
 
-    dataset = dataset.map(map_conversations).select_columns([INSTRUCTION_FIELD, CONVERSATIONS_FIELD])
-    logger.debug(f"✅ Dataset formatted with conversation format")
+    dataset = dataset.map(map_conversations).select_columns([prompts_field])
+    logger.debug(f"✅ Dataset formatted with {'conversation' if use_conversational_format else 'text'} format")
     logger.debug(f"Dataset columns: {dataset.column_names}")
-    logger.debug(f"Dataset conversations sample: {dataset[0][CONVERSATIONS_FIELD]}")
+    logger.debug(f"Dataset sample: {dataset[0][prompts_field]}")
     return dataset
 
 
@@ -175,7 +191,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         max_steps=max_steps,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        fp16=True,
+        bf16=True,
         max_grad_norm=0.3,
         warmup_ratio=0.03,
         group_by_length=True,
@@ -259,12 +275,19 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     logger.info(f"▶️ Start Llama fine tuning pipeline")
 
     # Load the model and the tokenizer
-    custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
     custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
-    model, tokenizer = load_model_and_tokenizer(model_name, custom_chat_template=custom_chat_template)
+    custom_text_format = kwargs.get("dataset_extras", {}).get("text_format")
 
-    # Format dataset as conversations in new column
-    dataset = construct_conversations(dataset, custom_instruction=custom_instruction)
+    model, tokenizer = load_model_and_tokenizer(model_name, custom_chat_template=custom_chat_template)
+    use_conversational_format = tokenizer.chat_template is not None  # use conversational format for instruct models
+
+    # Format dataset for training
+    dataset = construct_prompts(
+        dataset,
+        custom_instruction=custom_instruction,
+        custom_text_format=custom_text_format,
+        use_conversational_format=use_conversational_format,
+    )
 
     # Train the model
     trainer = build_trainer(model, tokenizer, dataset, output_dir)
