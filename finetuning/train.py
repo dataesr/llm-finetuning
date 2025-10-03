@@ -25,6 +25,7 @@ def main():
             output_model_name=args.output_model_name,
             dataset_name=args.dataset_name,
             forced_config=args.forced_config,
+            no_chat_template=args.no_chat_template,
         )
 
         if args.hf_hub:

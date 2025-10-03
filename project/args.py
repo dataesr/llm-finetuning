@@ -23,5 +23,6 @@ def get_args():
     parser.add_argument("--dataset_name", type=str, default="test.json", help="Dataset to use for fine-tuning")
     parser.add_argument("--hf_hub", type=str, default=None, help="Push the model to a Huggin Face Hub")
     parser.add_argument("--hf_hub_private", action="store_true", help="If set, the hugging face hub will be private")
+    parser.add_argument("--no_chat_template", action="store_true", help="If set, no chat template will be applied")
 
     return parser.parse_args()

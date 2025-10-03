@@ -35,13 +35,6 @@ def model_get_config(model_name: str, forced_config: str = None) -> str:
             return forced_config
         logger.warning(f"No forced config {forced_config} found")
 
-    # Check if model name is a config
-    names = [n.split("-")[0].lower() for n in model_name.split("/")]
-    for name in names:
-        if name in CONFIG_ALL:
-            logger.warning(f"Model {model_name} config automatically set to {name}")
-            return name
-
     # Get config from model files
     config = AutoConfig.from_pretrained(model_name)
     if not config:
@@ -63,6 +56,13 @@ def model_get_config(model_name: str, forced_config: str = None) -> str:
             if conf in model_arch.lower():
                 logger.warning(f"Model {model_name} config automatically set to {CONFIG_DEFAULT[conf]}")
                 return CONFIG_DEFAULT[conf]
+
+    # Check if model name is a config
+    names = [n.split("-")[0].lower() for n in model_name.split("/")]
+    for name in names:
+        if name in CONFIG_ALL:
+            logger.warning(f"Model {model_name} config automatically set to {name}")
+            return name
 
     logger.error(f"No config found for model {model_name} (type={model_type}, arch={model_arch})")
 

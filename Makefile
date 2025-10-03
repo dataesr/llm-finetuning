@@ -13,7 +13,7 @@ docker-build-finetuning:
 # Build Docker image for inference
 docker-build-inference:
 	@echo "Building inference docker image..."
-	docker build -f finetuning/Dockerfile -t $(GHCR_IMAGE_NAME)-inference:$(CURRENT_VERSION) -t $(GHCR_IMAGE_NAME)-inference:latest .
+	docker build -f inference/Dockerfile -t $(GHCR_IMAGE_NAME)-inference:$(CURRENT_VERSION) -t $(GHCR_IMAGE_NAME)-inference:latest .
 	@echo "Inference Docker image built."
 
 # Push Docker image for finetuning

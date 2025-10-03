@@ -25,7 +25,7 @@ FOLDER = "completions"
 class RequestData(BaseModel):
     """Generate request inputs"""
     prompts: list[str]
-    chat_template_params: Dict[str, Any] = {}
+    prompts_params: Dict[str, Any] = {}
     sampling_params: Dict[str, Any] = {}
 
 class Task(BaseModel):
@@ -130,9 +130,6 @@ async def lifespan(app: FastAPI):
     tokenizer.padding_side = "right"
     if not tokenizer:
         logger.error(f"❌ Tokenizer not loaded!")
-    if not tokenizer.chat_template:
-        logger.debug(f"No chat template found for {model_name} tokenizer, applying default..")
-        tokenizer.chat_template = app.state.pipeline.default_chat_template
     logger.debug(f"Model chat_template={tokenizer.chat_template}")
     app.state.tokenizer = tokenizer
     logger.info(f"✅ Tokenizer loaded")
@@ -199,9 +196,8 @@ async def generate(request_data: RequestData) -> JSONResponse:
     async def generate_task(task_id: str, request_data: RequestData):
         try:
             logger.info(f"➡️ New generation task {task_id} added ({len(request_data.prompts)} prompts)")
-            if request_data.sampling_params:
-                logger.debug(f"Generation with custom params: {request_data.sampling_params}")
 
+            # Run generation
             async with app.state.engine_lock:
                 await app.state.task_store.set_running(task_id)
                 completions = await asyncio.to_thread(
@@ -209,7 +205,7 @@ async def generate(request_data: RequestData) -> JSONResponse:
                     app.state.engine,
                     app.state.tokenizer,
                     request_data.prompts,
-                    request_data.chat_template_params,
+                    request_data.prompts_params,
                     request_data.sampling_params,
                 )
             await app.state.task_store.set_done(task_id, completions=completions)
@@ -251,47 +247,61 @@ async def get_generate_task(task_id: str) -> ORJSONResponse:
     return ORJSONResponse(content=task.model_dump())
 
 
-def _apply_chat_template(tokenizer, prompts: list[str], chat_template_params: Dict[str, Any]) -> list[str]:
+def _apply_chat_template(tokenizer, prompts: list[str], prompts_params: Dict[str, Any]) -> list[str]:
     logger.debug(f"Formatting {len(prompts)} prompts")
-    if chat_template_params:
-        logger.debug(f"Custom formatting params: {chat_template_params}")
+    if prompts_params:
+        logger.debug(f"Custom formatting params: {prompts_params}")
 
     # Get instruction param
-    instruction = chat_template_params.pop("instruction") if "instruction" in chat_template_params else None
+    instruction = prompts_params.pop("instruction") if "instruction" in prompts_params else None
     instruction = instruction or app.state.model_instruction
 
+    # Get text_format param
+    text_format = prompts_params.pop("text_format") if "text_format" in prompts_params else None
+
     # Get chat template param
-    chat_template = chat_template_params.pop("chat_template") if "chat_template" in chat_template_params else None
+    chat_template = prompts_params.pop("chat_template") if "chat_template" in prompts_params else None
     if chat_template:
         tokenizer.chat_template = chat_template
         logger.debug(f"Replace chat template : {tokenizer.chat_template}")
 
     # Format prompts
-    formatted_prompts = [
-        tokenizer.apply_chat_template(
-            app.state.pipeline.construct_one_conversation(system=instruction, user=prompt),
-            tokenize=False,
-            add_generation_prompt=True,
-            **chat_template_params,
-        )
-        for prompt in prompts
-    ]
+    formatted_prompts = prompts
+    if tokenizer.chat_template:
+        formatted_prompts = [
+            tokenizer.apply_chat_template(
+                app.state.pipeline.construct_one_conversation(system=instruction, user=prompt),
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            for prompt in prompts
+        ]
+    elif text_format:
+        formatted_prompts = [
+            text_format.format(instruction or "You are an helpful assistant", prompt, "") for prompt in prompts
+        ]
+    else:
+        pass  # No formatting
+
     logger.debug(f"Formatted prompts: {formatted_prompts[0]}")
 
     return formatted_prompts
 
 
 def _generate(
-    engine: LLM, tokenizer, prompts: list[str], chat_template_params: Dict[str, Any], sampling_params: Dict[str, Any]
+    engine: LLM, tokenizer, prompts: list[str], prompts_params: Dict[str, Any], sampling_params: Dict[str, Any]
 ) -> list[str]:
     logger.debug(f"Running generation on {len(prompts)} prompts...")
 
+    if sampling_params:
+        logger.debug(f"Custom sampling params: {sampling_params}")
+
     # Format prompts
-    formatted_prompts = _apply_chat_template(tokenizer, prompts, chat_template_params=chat_template_params)
+    formatted_prompts = _apply_chat_template(tokenizer, prompts, prompts_params=prompts_params)
 
     # Sampling params
     max_length = tokenizer.model_max_length
-    truncate_length = max_length if isinstance(max_length, int) and max_length < 100_000 else 8192
+    truncate_length = max_length if isinstance(max_length, int) and max_length < 1_000_000 else 8192
     full_params = {
         "seed": 0,
         "temperature": 0,

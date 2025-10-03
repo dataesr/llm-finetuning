@@ -36,7 +36,7 @@ def initialize(model_name: str, output_model_name=None) -> tuple:
     return output_model_name, output_dir
 
 
-def model_train(model_name: str, dataset_name: str, output_model_name: str = None, forced_config: str = None) -> str:
+def model_train(model_name: str, dataset_name: str, output_model_name: str = None, **kwargs) -> str:
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Cleanup
@@ -50,7 +50,7 @@ def model_train(model_name: str, dataset_name: str, output_model_name: str = Non
     dataset_extras = get_dataset_extras(dataset_name)
 
     # Get pipeline
-    config = model_get_config(model_name, forced_config)
+    config = model_get_config(model_name, kwargs.get("forced_config"))
     pipeline = importlib.import_module(f"project.pipeline.{config}")
 
     # Train model
@@ -60,6 +60,7 @@ def model_train(model_name: str, dataset_name: str, output_model_name: str = Non
         output_dir=output_dir,
         dataset=dataset,
         dataset_extras=dataset_extras,
+        no_chat_template=kwargs.get("no_chat_template"),
     )
 
     logger.info(f"Fine tuning of model {model_name} done")

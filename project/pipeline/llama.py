@@ -271,12 +271,15 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     """
     logger.info(f"▶️ Start Llama fine tuning pipeline")
 
-    # Load the model and the tokenizer
+    # Dataset custom prompts params
     custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
     custom_text_format = kwargs.get("dataset_extras", {}).get(TEXT_FORMAT_FIELD)
     custom_chat_template = kwargs.get("dataset_extras", {}).get(CHAT_TEMPLATE_FIELD)
 
+    # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name, custom_chat_template=custom_chat_template)
+    if kwargs.get("no_chat_template"):
+        tokenizer.chat_template = None
     use_conversational_format = tokenizer.chat_template is not None  # use conversational format for instruct models
 
     # Format dataset for training
