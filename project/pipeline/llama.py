@@ -5,7 +5,7 @@ from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
 from project.model.utils import model_get_finetuned_dir
 from project.dataset import (
-    save_dataset_instruction,
+    save_dataset_extras,
     INSTRUCTION_FIELD,
     INPUT_FIELD,
     COMPLETION_FIELD,
@@ -201,7 +201,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         disable_tqdm=False,
         report_to=None,
         dataloader_pin_memory=False,
-        max_seq_length=max_seq_length,
+        # max_seq_length=max_seq_length,
         packing=False,
     )
 
@@ -295,5 +295,5 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
     # Save the model
     merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
 
-    # Save the instruction
-    save_dataset_instruction(dataset, destination=model_get_finetuned_dir(output_model_name))
+    # Save the extras
+    save_dataset_extras(dataset, destination=model_get_finetuned_dir(output_model_name))

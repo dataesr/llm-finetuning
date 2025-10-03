@@ -1,4 +1,5 @@
 import os
+import json
 from datasets import load_dataset, Dataset
 from project.hugging import get_json_from_hub
 from project.logger import get_logger
@@ -91,6 +92,25 @@ def get_dataset_extras(repo_id: str) -> dict:
     extras = get_json_from_hub(filename="extras.json", repo_id=repo_id, repo_type="dataset")
     logger.debug(f"extras: {extras}")
     return extras
+
+
+def save_dataset_extras(extras: dict, destination: str):
+    """
+    Save dataset extras as json in model folder
+
+    Args:
+        extras (dict): Extras from dataset
+        destination (str): Fine tuned model directory
+    """
+    if not extras:
+        logger.debug("No extras to save")
+        return
+
+    # Save in model folder
+    with open(f"{destination}/extras.json", "w") as file:
+        json.dump(extras, file, indent=4)
+
+    logger.debug(f"✅ Extras from dataset saved in {destination}")
 
 
 def save_dataset_instruction(dataset: Dataset, destination: str):
