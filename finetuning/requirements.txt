@@ -6,3 +6,4 @@ peft==0.17.1
 # sentencepiece==0.2.1
 transformers==4.56.2
 trl==0.23.0
+wandb==0.22.2

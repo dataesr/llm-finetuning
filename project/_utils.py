@@ -33,3 +33,18 @@ def reset_folder(dir_path: str, delete=False):
     
     if not delete:
         os.makedirs(dir_path)
+
+def should_use_conversational_format(dataset_format_arg, dataset_chat_template):
+    if dataset_format_arg == "auto":
+        if dataset_chat_template is not None:
+            logger.debug("Format automatically set to 'conversational'")
+            return True
+        else:
+            logger.debug("Format automatically set to 'text'")
+            return False
+    elif dataset_format_arg == "conversational":
+        logger.debug("Format set to 'conversational'")
+        return True
+    else:
+        logger.debug("Format set to 'text'")
+        return False

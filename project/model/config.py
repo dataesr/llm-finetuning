@@ -10,6 +10,7 @@ EXTRACTED_FOLDER = "extracted"
 CONFIG_DEFAULT = {
     "llama": "llama",
     "qwen2": "llama",
+    "qwen3": "llama",
     "smollm3": "llama",
     "phi3": "llama",
     "gemma3_text": "llama",

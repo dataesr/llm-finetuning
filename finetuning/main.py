@@ -5,6 +5,7 @@
 
 from project.args import get_args
 from project.hugging import push_to_hub
+from project.wandb import wandb_init
 from project.model.utils import model_delete_dir
 from project.model.train import model_train
 from project.logger import get_logger
@@ -20,14 +21,19 @@ def main():
     if args.mode == "train":
         logger.debug(f"Start fine-tuning script with args {args}")
 
+        # init wandb
+        wandb_init()
+
+        # start model training
         output_model_name = model_train(
             model_name=args.model_name,
-            output_model_name=args.output_model_name,
+            pipeline_name=args.pipeline,
             dataset_name=args.dataset_name,
-            forced_config=args.forced_config,
-            no_chat_template=args.no_chat_template,
+            dataset_format=args.dataset_format,
+            output_model_name=args.output_model_name,
         )
 
+        # push to huggingface
         if args.hf_hub:
             push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
             model_delete_dir(output_model_name)

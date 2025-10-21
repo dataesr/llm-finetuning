@@ -309,7 +309,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
         logging_strategy="steps",
         logging_first_step=True,
         disable_tqdm=False,
-        report_to=None,
+        report_to="wandb",
         dataloader_pin_memory=False,
         # max_seq_length=max_seq_length,
         # packing = False,

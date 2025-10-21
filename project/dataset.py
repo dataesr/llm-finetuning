@@ -17,6 +17,8 @@ CONVERSATIONS_FIELD = "messages"
 CHAT_TEMPLATE_FIELD = "chat_template"
 TEXT_FORMAT_FIELD = "text_format"
 
+DEFAULT_TEXT_FORMAT = "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{response}"
+
 def get_file(object_name: str) -> str:
     """
     Get file path from object name
@@ -129,3 +131,73 @@ def save_dataset_instruction(dataset: Dataset, destination: str):
         file.write(instruction)
 
     logger.debug(f"✅ Instruction from dataset saved in {destination}")
+
+
+def construct_one_conversation(system: str, user: str, assistant: str = None):
+    """
+    Construct a conversation from system, user and assistant messages
+
+    Args:
+    - system (str): system instructions
+    - user (str): user input
+    - assistant (str, optional): assistant completion for training. Defaults to None.
+
+    Returns a conversation object
+    """
+    conversation = []
+
+    # Add system prompt
+    if system:
+        conversation.append({"role": "system", "content": system})
+
+    # Add user prompt
+    conversation.append({"role": "user", "content": user})
+
+    # Add assistant prompt
+    if assistant:
+        conversation.append({"role": "assistant", "content": assistant})
+
+    return conversation
+
+
+def construct_prompts(
+    dataset: Dataset,
+    custom_instruction: str = None,
+    custom_text_format: str = None,
+    use_conversational_format: bool = False,
+) -> Dataset:
+    """
+    Construct prompts for training on a dataset
+
+    Args:
+    - dataset (Dataset): training dataset
+    - custom_instruction (str): custom system prompt
+    - custom_text_format (str): custom text format
+    - use_conversational_format (bool): if True, use conversational format
+
+    Returns the training dataset with a conversations column
+    """
+    prompts_field = CONVERSATIONS_FIELD if use_conversational_format else TEXT_FIELD
+
+    def map_conversations(example):
+        if use_conversational_format:
+            # Conversational format (list of messages, ChatML-like)
+            return {
+                prompts_field: construct_one_conversation(
+                    system=custom_instruction,
+                    user=example[INPUT_FIELD],
+                    assistant=example[COMPLETION_FIELD],
+                )
+            }
+        else:
+            # Non-conversational (Alpaca-style prompt-response text)
+            instruction = custom_instruction or "You are an helpful assistant."
+            text_format = custom_text_format if custom_text_format else DEFAULT_TEXT_FORMAT
+            text = text_format.format(instruction, example[INPUT_FIELD], example[COMPLETION_FIELD])
+            return {prompts_field: text}
+
+    dataset = dataset.map(map_conversations).select_columns([prompts_field])
+    logger.debug(f"✅ Dataset formatted with {'conversation' if use_conversational_format else 'text'} format")
+    logger.debug(f"Dataset columns: {dataset.column_names}")
+    logger.debug(f"Dataset sample: {dataset[0][prompts_field]}")
+    return dataset
