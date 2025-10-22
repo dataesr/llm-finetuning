@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 NUM_TRAIN_EPOCHS = 3  # Number of training epochs
-MAX_STEPS = -1  # Number of training steps, should be set to -1 for full training
+MAX_STEPS = -1  # 5_000  # Number of training steps, should be set to -1 for full training
 BATCH_SIZE = 1  # Batch size per device during training. Optimal given our GPU vram.
 GRAD_ACC_STEPS = 4  # Number of steps before performing a backward/update pass
 OPTIM = "paged_adamw_8bit"
