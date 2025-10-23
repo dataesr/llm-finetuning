@@ -1,21 +1,20 @@
 import os
 import json
 import asyncio
-import importlib
 from uuid import uuid4
 import time
 from typing import Literal, Optional, Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status as fastapi_status
-from fastapi.responses import ORJSONResponse, JSONResponse, Response
+from fastapi.responses import ORJSONResponse, JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from vllm import LLM
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer import get_tokenizer
 from vllm.version import __version__ as VLLM_VERSION
-from project.model.config import model_get_config, model_get_instruction
-from project.logger import get_logger
+from shared.logger import get_logger
+from shared.dataset import construct_one_conversation
 
 logger = get_logger(__name__)
 
@@ -102,12 +101,8 @@ async def lifespan(app: FastAPI):
     model_name = os.getenv("MODEL_NAME")
     assert model_name is not None
 
-    # Get model pipeline
-    config = model_get_config(model_name)
-    app.state.pipeline = importlib.import_module(f"project.pipeline.{config}")
-
     # Get model instruction
-    app.state.model_instruction = model_get_instruction(model_name)
+    app.state.model_instruction = None  # TODO
 
     # Initialize vllm engine
     app.state.engine = LLM(
@@ -269,7 +264,7 @@ def _apply_chat_template(tokenizer, prompts: list[str], prompts_params: Dict[str
     if tokenizer.chat_template:
         formatted_prompts = [
             tokenizer.apply_chat_template(
-                app.state.pipeline.construct_one_conversation(system=instruction, user=prompt),
+                construct_one_conversation(system=instruction, user=prompt),
                 tokenize=False,
                 add_generation_prompt=True,
             )

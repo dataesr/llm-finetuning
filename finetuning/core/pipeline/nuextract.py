@@ -10,16 +10,15 @@ from transformers import (
 from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig, TaskType, prepare_model_for_kbit_training, AutoPeftModelForCausalLM
 from datasets import Dataset
-from project.model.utils import model_get_finetuned_dir, model_get_extracted_dir
-from project.dataset import (
-    save_dataset_instruction,
+from core.utils import model_get_finetuned_dir, model_get_extracted_dir
+from shared.dataset import (
     INSTRUCTION_FIELD,
     INPUT_FIELD,
     COMPLETION_FIELD,
     CHAT_TEMPLATE_FIELD,
     CONVERSATIONS_FIELD,
 )
-from project.logger import get_logger
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -9,7 +9,7 @@
 
 > launch finetuning job on ovh
 
-`ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-jobs@1azgra:/workspace/jobs:rwd --env HF_TOKEN=<huggingface_token> --env WANDB_KEY=<wandb_key> --env WANDB_PROJECT=<wandb_project> ghcr.io/dataesr/llm-finetuning:latest -- uv run main.py  --mode ["train", "push"] --model_name <huggingface_model_name> --pipeline ["causallm", "custom"] --dataset_name <dataset_name_from_object_storage> --output_model_name <name_of_finetuned_model> --hf_hub <huggingface_hub_id> --hf_hub_private`
+`ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-jobs@1azgra:/workspace/jobs:rwd --env HF_TOKEN=<huggingface_token> --env WANDB_KEY=<wandb_key> --env WANDB_PROJECT=<wandb_project> --env WANDB_NAME=<wandb_name> ghcr.io/dataesr/llm-finetuning:latest -- uv run main.py  --mode ["train", "push"] --model_name <huggingface_model_name> --pipeline ["causallm", "custom"] --dataset_name <dataset_name_from_object_storage> --output_model_name <name_of_finetuned_model> --hf_hub <huggingface_hub_id> --hf_hub_private`
 
 examples:
 - Simple Fine-Tuning

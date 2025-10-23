@@ -1,8 +1,8 @@
 import os
 import json
 from datasets import load_dataset, Dataset
-from project.hugging import get_json_from_hub
-from project.logger import get_logger
+from shared.hugging import get_json_from_hub
+from shared.logger import get_logger
 
 logger = get_logger(name=__name__)
 
@@ -18,6 +18,7 @@ CHAT_TEMPLATE_FIELD = "chat_template"
 TEXT_FORMAT_FIELD = "text_format"
 
 DEFAULT_TEXT_FORMAT = "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{response}"
+
 
 def get_file(object_name: str) -> str:
     """

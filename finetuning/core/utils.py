@@ -1,7 +1,7 @@
 import os
-from project.model.config import FOLDER
-from project.logger import get_logger
-from project._utils import reset_folder
+from core.config import FOLDER, MERGED_FOLDER, EXTRACTED_FOLDER
+from shared.logger import get_logger
+from shared.utils import reset_folder
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ def model_get_finetuned_dir(output_model_name:str, check:bool=False):
     Returns:
     - model_dir (str): Fine-tuned model path
     """
-    from project.model.config import FOLDER, MERGED_FOLDER
+    # from core.config import FOLDER, MERGED_FOLDER
 
     model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
 
@@ -48,7 +48,7 @@ def model_get_extracted_dir(output_model_name:str, check:bool=False):
     Returns:
     - model_dir (str): Fine-tuned model path
     """
-    from project.model.config import FOLDER, EXTRACTED_FOLDER
+    # from core.config import FOLDER, EXTRACTED_FOLDER
 
     model_dir = os.path.join(FOLDER, output_model_name, EXTRACTED_FOLDER)
 

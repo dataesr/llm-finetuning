@@ -46,8 +46,8 @@ RUN uv pip install -r requirements.txt
 RUN uv cache clean
 
 # Add all files to workpspace
-ADD project /workspace/project
-ADD inference /workspace/project
+ADD shared /workspace/shared
+ADD inference /workspace/shared
 
 # Clean cache and make sure user as rights
 # RUN uv cache clean && chown -R 42420:42420 /workspace/.cache

@@ -3,12 +3,12 @@
 # Description : Fine-tuning script for @dataesr
 """
 
-from project.args import get_args
-from project.hugging import push_to_hub
-from project.wandb import wandb_init
-from project.model.utils import model_delete_dir
-from project.model.train import model_train
-from project.logger import get_logger
+from core.args import get_args
+from core.wandb import wandb_init
+from core.utils import model_delete_dir
+from core.train import model_train
+from core.push import model_push_to_hub
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ def main():
 
         # push to huggingface
         if args.hf_hub:
-            push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
+            model_push_to_hub(output_model_name, args.hf_hub, args.hf_hub_private)
             model_delete_dir(output_model_name)
 
     # Upload model to hub
@@ -48,7 +48,7 @@ def main():
 
         logger.debug(f"Start pushing model to hugging face hub with args {args}")
 
-        push_to_hub(args.output_model_name, args.hf_hub, args.hf_hub_private)
+        model_push_to_hub(args.output_model_name, args.hf_hub, args.hf_hub_private)
         model_delete_dir(args.output_model_name)
 
     else:

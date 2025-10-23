@@ -1,11 +1,11 @@
 import os
 import importlib
 import torch
-from project.model.config import model_get_config, FOLDER
-from project.model.utils import model_default_output_name
-from project.dataset import get_dataset, get_dataset_extras
-from project._utils import reset_folder
-from project.logger import get_logger
+from core.config import FOLDER
+from core.utils import model_default_output_name
+from shared.dataset import get_dataset, get_dataset_extras
+from shared.utils import reset_folder
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 

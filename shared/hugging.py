@@ -1,8 +1,7 @@
 import os
 import json
 from huggingface_hub import create_repo, upload_folder, hf_hub_download
-from project.model.utils import model_get_finetuned_dir
-from project.logger import get_logger
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -42,7 +41,7 @@ def get_json_from_hub(filename: str, repo_id: str, repo_type: str):
         with open(json_path, "r") as json_file:
             json_data = json.load(json_file)
     except Exception as error:
-        logger.error(f"Error downloading {filename} from {repo_id}")
+        logger.error(f"Error downloading {filename} from {repo_id}: {error}")
         return json_data
 
     logger.debug(f"Successfully loaded {filename} from {repo_id}")
@@ -81,18 +80,3 @@ def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
     logger.debug(f"commit_info = {commit_info}")
 
     logger.info(f"✅ Model uploaded to https://huggingface.co/{repo_id}")
-
-
-def push_to_hub(output_model_name: str, repo_id: str, private=False):
-    """Push a model from storage to hugging face hub
-
-    Args:
-    - output_model_name (str): Name of the model to push
-    - repo_id (str): The model repo ID on Hugging Face (e.g. "your-username/model-name")
-    - private (bool): If True, creates a private repo
-    """
-    # Get model folder
-    model_dir = model_get_finetuned_dir(output_model_name, check=True)
-
-    # Upload model to hub
-    upload_model_to_hub(model_dir, repo_id=repo_id, private=private)

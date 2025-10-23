@@ -46,7 +46,7 @@ RUN uv pip install -r requirements.txt
 RUN uv cache clean
 
 # Add all files to workpspace
-COPY project /workspace/project
+COPY shared /workspace/shared
 COPY finetuning /workspace
 
 # Clean cache and make sure user as rights

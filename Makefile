@@ -1,4 +1,4 @@
-CURRENT_VERSION=$(shell cat project/version.py | cut -d '"' -f 2)
+CURRENT_VERSION=$(shell cat shared/version.py | cut -d '"' -f 2)
 IMAGE_NAME=llm-finetuning
 DOCKER_IMAGE_NAME=dataesr/llm
 GHCR_IMAGE_NAME=ghcr.io/$(DOCKER_IMAGE_NAME)

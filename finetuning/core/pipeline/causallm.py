@@ -3,11 +3,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from project.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
-from project._utils import should_use_conversational_format
-from project.model.utils import model_get_finetuned_dir
-from project.wandb import wandb_add_config
-from project.logger import get_logger
+from core.utils import model_get_finetuned_dir
+from core.wandb import wandb_add_config
+from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
+from shared.utils import should_use_conversational_format
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
