@@ -31,7 +31,7 @@ docker-push-inference:
 	@echo Docker image pushed
 
 release:
-	echo 'VERSION = "$(VERSION)"'' > project/version.py
+	echo 'VERSION = "$(VERSION)"'' > shared/version.py
 	git commit -am '[release] version $(VERSION)'
 	git tag $(VERSION)
 	@echo If everything is OK, you can push with tags i.e. git push origin main --tags

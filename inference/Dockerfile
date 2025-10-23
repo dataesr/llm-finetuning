@@ -53,4 +53,4 @@ ADD inference /workspace/shared
 # RUN uv cache clean && chown -R 42420:42420 /workspace/.cache
 
 # CMD ["python3", "train.py"]
-CMD ["uvicorn", "project.app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "1200"]
+CMD ["uvicorn", "shared.app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "1200"]

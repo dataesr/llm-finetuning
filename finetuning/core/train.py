@@ -50,7 +50,7 @@ def model_train(model_name: str, pipeline_name: str, dataset_name: str, output_m
     dataset_extras = get_dataset_extras(dataset_name)
 
     # Get pipeline
-    pipeline = importlib.import_module(f"project.pipeline.{pipeline_name}")
+    pipeline = importlib.import_module(f"core.pipeline.{pipeline_name}")
 
     # Train model
     pipeline.train(
