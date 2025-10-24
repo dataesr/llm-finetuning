@@ -8,7 +8,7 @@ from shared.logger import get_logger
 logger = get_logger(__name__)
 
 
-def model_train(model_name: str, model_output_name: str, pipeline_name: str, dataset_name: str, **kwargs) -> str:
+def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_name: str, **kwargs) -> str:
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Cleanup
@@ -18,8 +18,9 @@ def model_train(model_name: str, model_output_name: str, pipeline_name: str, dat
     dataset = get_dataset(dataset_name)
     dataset_extras = get_dataset_extras(dataset_name)
     wandb_add_artifact(
-        name=dataset_name,
+        name=dataset_name.split("/")[-1],
         type="dataset",
+        dataset_source=None,
         dataset_len=len(dataset),
         dataset_features=dataset.features,
         **dataset_extras,
@@ -31,7 +32,7 @@ def model_train(model_name: str, model_output_name: str, pipeline_name: str, dat
     # Train model
     pipeline.train(
         model_name=model_name,
-        model_dir=model_output_name,
+        model_dir=model_dir,
         dataset=dataset,
         dataset_extras=dataset_extras,
         dataset_format=kwargs.get("dataset_format"),

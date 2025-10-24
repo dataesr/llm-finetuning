@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 NUM_TRAIN_EPOCHS = 3  # Number of training epochs
-MAX_STEPS = -1  # 5_000  # Number of training steps, should be set to -1 for full training
+MAX_STEPS = 10  # 5_000  # Number of training steps, should be set to -1 for full training
 BATCH_SIZE = 1  # Batch size per device during training. Optimal given our GPU vram.
 GRAD_ACC_STEPS = 4  # Number of steps before performing a backward/update pass
 OPTIM = "paged_adamw_8bit"
@@ -22,7 +22,7 @@ WEIGHT_DECAY = 0.001
 MAX_GRAD_NORM = 0.3
 WARMUP_RATIO = 0.03
 SAVE_STEPS = 500
-LOG_STEPS = 100
+LOG_STEPS = 1
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 LORA_R = 16

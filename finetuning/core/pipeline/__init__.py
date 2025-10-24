@@ -2,8 +2,7 @@
 # It should contains a function train() with params:
 # pipeline.train(
 #     model_name=model_name,
-#     output_model_name=output_model_name,
-#     output_dir=output_dir,
+#     model_dir=model_dir,
 #     dataset=dataset,
 #     dataset_extras=dataset_extras,
 #     dataset_format=kwargs.get("dataset_format"),

@@ -22,7 +22,7 @@ def main():
         logger.debug(f"Start fine-tuning script with args {args}")
 
         # Initalize model folder
-        model_output_name, model_dir = model_initialize_dir(args.model_name, args.hf_hub)
+        model_output_name, model_dir = model_initialize_dir(args.model_name)
 
         # Initialize wandb
         wandb_init(model_output_name)
@@ -34,7 +34,6 @@ def main():
             pipeline_name=args.pipeline,
             dataset_name=args.dataset_name,
             dataset_format=args.dataset_format,
-            output_model_name=args.output_model_name,
         )
 
         # Push model to huggingface

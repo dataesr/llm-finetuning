@@ -20,21 +20,18 @@ def model_default_output_name(model_name: str, suffix: str = None) -> str:
     return model_output_name
 
 
-def model_initialize_dir(model_name: str, hf_hub: str = None) -> tuple:
+def model_initialize_dir(model_name: str) -> tuple:
     """
     Initialize model output folder and name
 
     Args:
     - model_name (str): Base model to finetune
-    - hf_hub (str): HuggingFace hub repository. Default to None
 
     Returns:
     - model_dir (str): Model training directory
     """
     # Default output model name
-    model_output_name = hf_hub
-    if not model_output_name:
-        model_output_name = model_default_output_name(model_name, "train")
+    model_output_name = model_default_output_name(model_name)
 
     if not os.path.isdir(FOLDER):
         raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
