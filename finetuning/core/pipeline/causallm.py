@@ -3,8 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from core.utils import model_get_finetuned_dir
-from core.wandb import wandb_add_config
+from core.utils import model_get_output_dir, model_get_finetuned_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
 from shared.logger import get_logger
@@ -84,7 +83,7 @@ def load_model_and_tokenizer(model_name: str):
     return model, tokenizer
 
 
-def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTrainer:
+def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrainer:
     """
     Build SFTTrainer for finetuning
 
@@ -92,7 +91,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     - model: model to finetune
     - tokenizer: tokenizer:
     - dataset: Dataset
-    - output_dir: training output directory
+    - model_dir: model directory
 
     Returns:
     - trainer: SFTTrainer
@@ -110,7 +109,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
 
     # Build sft config
     training_args = SFTConfig(
-        output_dir=output_dir,
+        output_dir=model_get_output_dir(model_dir),
         num_train_epochs=NUM_TRAIN_EPOCHS,
         learning_rate=LEARNING_RATE,
         lr_scheduler_type=LR_SCHEDULER,
@@ -137,16 +136,16 @@ def build_trainer(model, tokenizer, dataset: Dataset, output_dir: str) -> SFTTra
     return trainer
 
 
-def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir: str):
+def merge_and_save_model(trainer, tokenizer, model_dir: str):
     """
     Save trained model and tokenizer.
 
     Args:
     - trainer: trainer
     - tokenizer: tokenizer to save
-    - output_model_name (str): Name of the saved model
-    - output_dir (str): Path to output directory
+    - model_dr (str): model directory
     """
+    output_dir = model_get_output_dir(model_dir)
     logger.info(f"Start saving model to {output_dir}")
 
     # Get model from trainer
@@ -173,24 +172,23 @@ def merge_and_save_model(trainer, tokenizer, output_model_name: str, output_dir:
         return
 
     # Save final merged model
-    output_merged_dir = model_get_finetuned_dir(output_model_name)
+    output_merged_dir = model_get_finetuned_dir(model_dir)
     model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
     tokenizer.save_pretrained(output_merged_dir)
 
-    logger.info(f"✅ Fine-tuned model {output_model_name} merged and saved to {output_merged_dir}")
+    logger.info(f"✅ Fine-tuned model {model_dir} merged and saved to {output_merged_dir}")
 
     # Cleanup
     torch.cuda.empty_cache()
 
 
-def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dataset, **kwargs):
+def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     """
     Llama model training pipeline
 
     Args:
         model_name (str): model to train
-        output_model_name (str): model name to output
-        output_dir (str): directory to output
+        model_dir (str): model directory
         dataset (Dataset): training dataset
     """
     logger.info(f"▶️ Start causalLM finetuning pipeline")
@@ -210,12 +208,12 @@ def train(model_name: str, output_model_name: str, output_dir: str, dataset: Dat
         custom_text_format=custom_text_format,
         use_conversational_format=use_conversational_format,
     )
-    wandb_add_config({"dataset_len": len(dataset)})
 
     # Train the model
-    trainer = build_trainer(model, tokenizer, dataset, output_dir)
+    output_dir = model_get_output_dir(model_dir)
+    trainer = build_trainer(model, tokenizer, dataset, output_dir=output_dir)
     trainer.train()
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, tokenizer, output_model_name, output_dir=output_dir)
+    merge_and_save_model(trainer, tokenizer, output_dir=output_dir)

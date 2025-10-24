@@ -1,7 +1,7 @@
 import os
 from core.config import FOLDER, MERGED_FOLDER, EXTRACTED_FOLDER
 from shared.logger import get_logger
-from shared.utils import reset_folder
+from shared.utils import create_folder, reset_folder
 
 logger = get_logger(__name__)
 
@@ -14,60 +14,99 @@ def model_default_output_name(model_name: str, suffix: str = None) -> str:
     - suffix (str): Suffix to add
 
     Returns:
-    - output_model_name (str): New model name
+    - model_dir (str): model directory
     """
-    output_model_name = f"{model_name.split("/")[-1]}-{suffix}"
-    return output_model_name
+    model_output_name = f"{model_name.split("/")[-1]}-{suffix}"
+    return model_output_name
 
-def model_get_finetuned_dir(output_model_name:str, check:bool=False):
+
+def model_initialize_dir(model_name: str, hf_hub: str = None) -> tuple:
+    """
+    Initialize model output folder and name
+
+    Args:
+    - model_name (str): Base model to finetune
+    - hf_hub (str): HuggingFace hub repository. Default to None
+
+    Returns:
+    - model_dir (str): Model training directory
+    """
+    # Default output model name
+    model_output_name = hf_hub
+    if not model_output_name:
+        model_output_name = model_default_output_name(model_name, "train")
+
+    if not os.path.isdir(FOLDER):
+        raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
+
+    # Create output folder
+    dir_path = create_folder(f"{FOLDER}/{model_output_name}")
+    model_dir = dir_path.removeprefix(FOLDER)
+
+    return model_output_name, model_dir
+
+def model_get_output_dir(model_dir:str, check:bool=False) -> str:
+    """
+    Get output model folder
+
+    Args:
+    - model_dir (str): Model directory
+
+    Returns:
+    - finetuned_dir (str): Model training output directory
+    """
+    output_dir = os.path.join(FOLDER, model_dir)
+
+    if check and not os.path.isdir(output_dir):
+        raise FileNotFoundError(f"Folder {output_dir} not found on storage!")
+
+    return output_dir
+
+def model_get_finetuned_dir(model_dir:str, check:bool=False) -> str:
     """
     Get finetuned model folder
 
     Args:
-    - output_model_name (str): Fine-tuned model name
+    - model_dir (str): Model directory
 
     Returns:
-    - model_dir (str): Fine-tuned model path
+    - finetuned_dir (str): Model finetuned directory
     """
-    # from core.config import FOLDER, MERGED_FOLDER
+    finetuned_dir = os.path.join(FOLDER, model_dir, MERGED_FOLDER)
 
-    model_dir = os.path.join(FOLDER, output_model_name, MERGED_FOLDER)
+    if check and not os.path.isdir(finetuned_dir):
+        raise FileNotFoundError(f"Folder {finetuned_dir} not found on storage!")
 
-    if check and not os.path.isdir(model_dir):
-        raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
+    return finetuned_dir
 
-    return model_dir
-
-def model_get_extracted_dir(output_model_name:str, check:bool=False):
+def model_get_extracted_dir(model_dir:str, check:bool=False) -> str:
     """
     Get finetuned model folder
 
     Args:
-    - output_model_name (str): Fine-tuned model name
+    - model_dir (str): Model directory
 
     Returns:
     - model_dir (str): Fine-tuned model path
     """
-    # from core.config import FOLDER, EXTRACTED_FOLDER
+    extracted_dir = os.path.join(FOLDER, model_dir, EXTRACTED_FOLDER)
 
-    model_dir = os.path.join(FOLDER, output_model_name, EXTRACTED_FOLDER)
+    if check and not os.path.isdir(extracted_dir):
+        raise FileNotFoundError(f"Folder {extracted_dir} not found on storage!")
 
-    if check and not os.path.isdir(model_dir):
-        raise FileNotFoundError(f"Folder {model_dir} not found on storage!")
+    return extracted_dir
 
-    return model_dir
-
-def model_delete_dir(output_model_name: str):
+def model_delete_dir(model_dir: str):
     """
     Delete all model files
 
     Args:
     - model_dir (str): model folder
     """
-    model_dir = os.path.join(FOLDER, output_model_name)
+    dir_path = model_get_output_dir(model_dir)
 
     try:
-        reset_folder(model_dir, delete=True)
-        logger.info(f"✅ Model folder {model_dir} deleted")
+        reset_folder(dir_path, delete=True)
+        logger.info(f"✅ Model folder {dir_path} deleted")
     except Exception as error:
-        logger.debug(f"Cannot delete folder {model_dir}: {error}")
+        logger.debug(f"Cannot delete folder {dir_path}: {error}")

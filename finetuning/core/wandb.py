@@ -1,13 +1,24 @@
 import os
 import wandb
+from typing import Literal
 
 
-def wandb_init():
-    os.environ["WANDB_LOG_MODEL"] = "checkpoint"
+def wandb_init(name: str = None):
+    # add log checkpoints
+    # os.environ["WANDB_LOG_MODEL"] = "checkpoint"
+
+    # login
     wandb.login(key=os.getenv("WANDB_KEY"))
-    wandb.init()
+
+    # init run
+    run_name = os.getenv("WANDB_NAME") or name
+    wandb.init(name=run_name, job_type="train")
 
 
-def wandb_add_config(config: dict):
-    if config:
-        wandb.config.update(config)
+def wandb_add_artifact(name: str, type: Literal["dataset", "model"], **metadata):
+    artifact = wandb.Artifact(name=name, type=type, metadata=metadata)
+    wandb.run.log(artifact)
+
+
+def wandb_finish():
+    wandb.run.finish()

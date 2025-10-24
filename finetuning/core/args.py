@@ -18,10 +18,10 @@ def get_args():
         default="train",
         help="Execution mode: train model or push model to hub",
     )
+    parser.add_argument("--push_model_dir", type=str, default=None, help="Fine-tuned model directory to push")
 
     # Model name
     parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.2-1B", help="Base model to fine-tune")
-    parser.add_argument("--output_model_name", type=str, default=None, help="Fine-tuned model name")
 
     # Finetuning pipeline
     parser.add_argument(
