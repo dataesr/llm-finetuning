@@ -48,7 +48,7 @@ def get_json_from_hub(filename: str, repo_id: str, repo_type: str):
     return json_data
 
 
-def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
+def upload_model_to_hub(model_dir: str, repo_id: str, private=False) -> str:
     """
     Uploads a model directory to the Hugging Face Hub.
 
@@ -56,6 +56,9 @@ def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
     - model_dir (str): Path to the saved model folder (should include config.json, pytorch_model.bin, tokenizer, etc.)
     - repo_id (str): The model repo ID on Hugging Face
     - private (bool): If True, creates a private repo
+
+    Returns:
+    - hf_hash (str): Hugging Face commit hash id
     """
 
     logger.info(f"Start uploading model from {model_dir} to https://huggingface.co/{repo_id}")
@@ -77,6 +80,7 @@ def upload_model_to_hub(model_dir: str, repo_id: str, private=False):
         repo_id=repo_id,
         token=token,
     )
-    logger.debug(f"commit_info = {commit_info}")
-
+    logger.debug(f"commit_info = {commit_info.__dict__}")
     logger.info(f"✅ Model uploaded to https://huggingface.co/{repo_id}")
+
+    return commit_info.oid

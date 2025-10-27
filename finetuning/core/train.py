@@ -1,7 +1,6 @@
-import os
 import importlib
 import torch
-from core.wandb import wandb_add_artifact
+from core.wandb import wandb_add_dataset_artifact
 from shared.dataset import get_dataset, get_dataset_extras
 from shared.logger import get_logger
 
@@ -17,13 +16,11 @@ def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_nam
     # Load dataset
     dataset = get_dataset(dataset_name)
     dataset_extras = get_dataset_extras(dataset_name)
-    wandb_add_artifact(
-        name=dataset_name.split("/")[-1],
-        type="dataset",
-        dataset_source=None,
+    wandb_add_dataset_artifact(
+        dataset_name=dataset_name,
+        dataset=dataset,
         dataset_len=len(dataset),
         dataset_features=dataset.features,
-        **dataset_extras,
     )
 
     # Get pipeline

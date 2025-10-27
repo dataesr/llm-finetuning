@@ -20,7 +20,7 @@ TEXT_FORMAT_FIELD = "text_format"
 DEFAULT_TEXT_FORMAT = "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{response}"
 
 
-def get_file(object_name: str) -> str:
+def get_file(object_name: str, check=False) -> str:
     """
     Get file path from object name
 
@@ -32,14 +32,14 @@ def get_file(object_name: str) -> str:
     """
 
     # Check folder exists
-    if not os.path.isdir(FOLDER):
+    if not os.path.isdir(FOLDER) and check:
         raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
 
     # Get file path
     file_path = f"{FOLDER}/{object_name}"
 
     # Check file exists
-    if not os.path.isfile(file_path):
+    if not os.path.isfile(file_path) and check:
         raise FileNotFoundError(f"File {file_path} not found on storage!")
 
     return file_path
@@ -64,7 +64,7 @@ def get_dataset(object_name: str) -> Dataset:
         logger.debug(f"Trying to load from storage...")
 
         # Get file path
-        file_path = get_file(object_name)
+        file_path = get_file(object_name, check=True)
 
         # Load as dataset
         dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
@@ -81,6 +81,25 @@ def get_dataset(object_name: str) -> Dataset:
     # TODO: add randomness
 
     return dataset
+
+
+def get_commit_hash(dataset: Dataset) -> str | None:
+    """
+    Retrieve commit hash from dataset checksums
+
+    Args:
+        dataset (Dataset): dataset
+
+    Returns:
+        commit_hash (str): dataset commit hash
+    """
+    commit_hash = None
+    checksums = dataset.info.download_checksums
+    if isinstance(checksums, dict) and checksums:
+        checksums_list = list(checksums.keys())
+        checksum_file = checksums_list[0].split("@")[1]
+        commit_hash = checksum_file.split("/")[0]
+    return commit_hash
 
 
 def get_dataset_extras(repo_id: str) -> dict:
@@ -134,13 +153,13 @@ def save_dataset_instruction(dataset: Dataset, destination: str):
     logger.debug(f"✅ Instruction from dataset saved in {destination}")
 
 
-def construct_one_conversation(system: str, user: str, assistant: str = None):
+def construct_one_conversation(user: str, system: str = None, assistant: str = None):
     """
     Construct a conversation from system, user and assistant messages
 
     Args:
-    - system (str): system instructions
     - user (str): user input
+    - system (str, optional): system instructions. Defaults to None.
     - assistant (str, optional): assistant completion for training. Defaults to None.
 
     Returns a conversation object
@@ -185,7 +204,7 @@ def construct_prompts(
             # Conversational format (list of messages, ChatML-like)
             return {
                 prompts_field: construct_one_conversation(
-                    system=custom_instruction,
+                    system=custom_instruction or example.get(INSTRUCTION_FIELD),
                     user=example[INPUT_FIELD],
                     assistant=example[COMPLETION_FIELD],
                 )

@@ -7,7 +7,7 @@ from core.args import get_args
 from core.utils import model_delete_dir, model_initialize_dir
 from core.train import model_train
 from core.push import model_push_to_hub
-from core.wandb import wandb_add_artifact, wandb_finish, wandb_init
+from core.wandb import wandb_add_model_artifact, wandb_finish, wandb_init
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,20 +16,23 @@ logger = get_logger(__name__)
 def main():
     # Get script arguments
     args = get_args()
+    model_name = args.model_name
+    script_mode = args.mode
 
     ### Fine-tuning pipeline
-    if args.mode == "train":
+    if script_mode == "train":
+
         logger.debug(f"Start fine-tuning script with args {args}")
 
         # Initalize model folder
-        model_output_name, model_dir = model_initialize_dir(args.model_name)
+        model_output_name, model_dir = model_initialize_dir(model_name)
 
         # Initialize wandb
         wandb_init(model_output_name)
 
         # Start model training
         model_train(
-            model_name=args.model_name,
+            model_name=model_name,
             model_dir=model_dir,
             pipeline_name=args.pipeline,
             dataset_name=args.dataset_name,
@@ -37,18 +40,21 @@ def main():
         )
 
         # Push model to huggingface
-        if args.hf_hub:
-            model_push_to_hub(model_dir, args.hf_hub, args.hf_hub_private)
-            model_delete_dir(model_dir)
+        hf_hub = args.hf_hub
+        hf_hash = None
+        if hf_hub:
+            hf_hash = model_push_to_hub(model_dir, hf_hub, args.hf_hub_private)
+            if hf_hash:
+                model_delete_dir(model_dir)
 
         # Store model artifact
-        wandb_add_artifact(name=model_output_name, type="model", hf_hub=args.hf_hub, hf_commit=None)
+        wandb_add_model_artifact(model_name=model_name, model_dir=model_dir, hf_hub=hf_hub, hf_hash=hf_hash)
 
         # Finish wandb
         wandb_finish()
 
     ### Upload model to hub
-    elif args.mode == "push":
+    elif script_mode == "push":
 
         if not args.push_model_dir:
             raise ValueError("--push_model_dir must be specified in push mode")
