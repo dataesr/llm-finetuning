@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from core.utils import model_get_output_dir, model_get_finetuned_dir
+from core.utils import model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
 from shared.logger import get_logger
@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
 NUM_TRAIN_EPOCHS = 3  # Number of training epochs
-MAX_STEPS = 10  # 5_000  # Number of training steps, should be set to -1 for full training
+MAX_STEPS = -1  # 5_000  # Number of training steps, should be set to -1 for full training
 BATCH_SIZE = 1  # Batch size per device during training. Optimal given our GPU vram.
 GRAD_ACC_STEPS = 4  # Number of steps before performing a backward/update pass
 OPTIM = "paged_adamw_8bit"
@@ -22,7 +22,7 @@ WEIGHT_DECAY = 0.001
 MAX_GRAD_NORM = 0.3
 WARMUP_RATIO = 0.03
 SAVE_STEPS = 500
-LOG_STEPS = 1
+LOG_STEPS = 100
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 LORA_R = 16
@@ -109,7 +109,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
 
     # Build sft config
     training_args = SFTConfig(
-        output_dir=model_get_output_dir(model_dir),
+        output_dir=model_get_checkpoints_dir(model_dir),
         num_train_epochs=NUM_TRAIN_EPOCHS,
         learning_rate=LEARNING_RATE,
         lr_scheduler_type=LR_SCHEDULER,
@@ -210,10 +210,9 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     )
 
     # Train the model
-    output_dir = model_get_output_dir(model_dir)
-    trainer = build_trainer(model, tokenizer, dataset, output_dir=output_dir)
+    trainer = build_trainer(model, tokenizer, dataset, model_dir=model_dir)
     trainer.train()
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, tokenizer, output_dir=output_dir)
+    merge_and_save_model(trainer, tokenizer, model_dir=model_dir)

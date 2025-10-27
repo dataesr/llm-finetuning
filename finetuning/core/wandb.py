@@ -17,7 +17,7 @@ def wandb_init(name: str = None):
 
 def wandb_add_artifact(name: str, type: Literal["dataset", "model"], **metadata):
     artifact = wandb.Artifact(name=name, type=type, metadata=metadata)
-    wandb.run.log(artifact)
+    wandb.run.use_artifact(artifact)
 
 
 def wandb_finish():

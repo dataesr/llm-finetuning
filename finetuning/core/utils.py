@@ -1,5 +1,5 @@
 import os
-from core.config import FOLDER, MERGED_FOLDER, EXTRACTED_FOLDER
+from core.config import FOLDER, CHECKPOINTS_FOLDER, MERGED_FOLDER, EXTRACTED_FOLDER
 from shared.logger import get_logger
 from shared.utils import create_folder, reset_folder
 
@@ -16,7 +16,9 @@ def model_default_output_name(model_name: str, suffix: str = None) -> str:
     Returns:
     - model_dir (str): model directory
     """
-    model_output_name = f"{model_name.split("/")[-1]}-{suffix}"
+    model_output_name = f"{model_name.split("/")[-1]}"
+    if suffix:
+        model_output_name += suffix
     return model_output_name
 
 
@@ -37,8 +39,8 @@ def model_initialize_dir(model_name: str) -> tuple:
         raise FileNotFoundError(f"Folder {FOLDER} not found on storage!")
 
     # Create output folder
-    dir_path = create_folder(f"{FOLDER}/{model_output_name}")
-    model_dir = dir_path.removeprefix(FOLDER)
+    dir_path = create_folder(f"{FOLDER}/{model_name}")
+    model_dir = dir_path.removeprefix(f"{FOLDER}/")
 
     return model_output_name, model_dir
 
@@ -58,6 +60,23 @@ def model_get_output_dir(model_dir:str, check:bool=False) -> str:
         raise FileNotFoundError(f"Folder {output_dir} not found on storage!")
 
     return output_dir
+
+def model_get_checkpoints_dir(model_dir:str, check:bool=False) -> str:
+    """
+    Get checkpoints model folder
+
+    Args:
+    - model_dir (str): Model directory
+
+    Returns:
+    - checkpoints_dir (str): Model training checkpoints directory
+    """
+    checkpoints_dir = os.path.join(FOLDER, model_dir, CHECKPOINTS_FOLDER)
+
+    if check and not os.path.isdir(checkpoints_dir):
+        raise FileNotFoundError(f"Folder {checkpoints_dir} not found on storage!")
+
+    return checkpoints_dir
 
 def model_get_finetuned_dir(model_dir:str, check:bool=False) -> str:
     """

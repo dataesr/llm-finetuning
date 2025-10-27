@@ -5,6 +5,7 @@
 # logger = get_logger(__name__)
 
 FOLDER = "jobs"
+CHECKPOINTS_FOLDER = "checkpoints"
 MERGED_FOLDER = "merged"
 EXTRACTED_FOLDER = "extracted"
 # CONFIG_DEFAULT = {
