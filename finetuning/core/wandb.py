@@ -34,7 +34,7 @@ def wandb_add_artifact(name: str, type: Literal["dataset", "model"], **metadata)
 
 
 def wandb_add_dataset_artifact(dataset_name: str, dataset: Dataset, **metadata):
-    artifact_name = f"dataset-{_sanitize_name(dataset_name)}"
+    artifact_name = {_sanitize_name(dataset_name)}
     commit_hash = get_commit_hash(dataset)
     if commit_hash:
         metadata["dataset_source"] = "huggingface"
@@ -49,9 +49,9 @@ def wandb_add_dataset_artifact(dataset_name: str, dataset: Dataset, **metadata):
 
 def wandb_add_model_artifact(model_dir: str, hf_hub: str = None, hf_hash: str = None, **metadata):
     run_name = wandb.run.name
-    artifact_name = f"model-{run_name}"
+    artifact_name = run_name
     if hf_hub:
-        artifact_name = f"model-{_sanitize_name(hf_hub)}"
+        artifact_name = _sanitize_name(hf_hub)
         metadata["model_source"] = "huggingface"
         metadata["hf_hub"] = hf_hub
         metadata["hf_hash"] = hf_hash
