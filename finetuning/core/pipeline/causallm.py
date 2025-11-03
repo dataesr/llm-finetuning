@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from core.utils import model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
+from core.utils import get_env, model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
 from shared.logger import get_logger
@@ -11,30 +11,30 @@ from shared.logger import get_logger
 logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
-NUM_TRAIN_EPOCHS = 3  # Number of training epochs
-MAX_STEPS = 10  # 5_000  # Number of training steps, should be set to -1 for full training
-BATCH_SIZE = 1  # Batch size per device during training. Optimal given our GPU vram.
-GRAD_ACC_STEPS = 4  # Number of steps before performing a backward/update pass
-OPTIM = "paged_adamw_8bit"
-LEARNING_RATE = 2e-5  # The initial learning rate for AdamW optimizer
-LR_SCHEDULER = "linear"  # Scheduler rate type
-WEIGHT_DECAY = 0.001
-MAX_GRAD_NORM = 0.3
-WARMUP_RATIO = 0.03
-SAVE_STEPS = 500
-LOG_STEPS = 1
+NUM_TRAIN_EPOCHS = get_env("NUM_TRAIN_EPOCHS", 3, int)  # Number of training epochs
+MAX_STEPS = get_env("MAX_STEPS", -1, int)  # 5_000  # Number of training steps, should be set to -1 for full training
+BATCH_SIZE = get_env("BATCH_SIZE", 1, int)  # Batch size per device during training. Optimal given our GPU vram.
+GRAD_ACC_STEPS = get_env("GRAD_ACC_STEPS", 4, int)  # Number of steps before performing a backward/update pass
+OPTIM = get_env("OPTIM", "paged_adamw_8bit", str)
+LEARNING_RATE = get_env("LEARNING_RATE", 2e-5, float)  # The initial learning rate for AdamW optimizer
+LR_SCHEDULER = get_env("LR_SCHEDULER", "linear", str)  # Scheduler rate type
+WEIGHT_DECAY = get_env("WEIGHT_DECAY", 0.001, float)
+MAX_GRAD_NORM = get_env("MAX_GRAD_NORM", 0.3, float)
+WARMUP_RATIO = get_env("WARMUP_RATIO", 0.03, float)
+SAVE_STEPS = get_env("SAVE_STEPS", 500, int)
+LOG_STEPS = get_env("LOG_STEPS", 1, int)
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
-LORA_R = 16
-LORA_ALPHA = 2 * LORA_R
-LORA_DROPOUT = 0.1
+LORA_R = get_env("LORA_R", 16, int)
+LORA_ALPHA = get_env("LORA_ALPHA", 2 * LORA_R, int)
+LORA_DROPOUT = get_env("LORA_DROPOUT", 0.1, float)
 TASK_TYPE = TaskType.CAUSAL_LM
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
-BNB_4BIT = True
-BNB_QUANT_TYPE = "nf4"
-BNB_DOUBLE_QUANT = False
-BNB_COMPUTE_DTYPE = torch.bfloat16
+BNB_4BIT = get_env("BNB_4BIT", True, bool)
+BNB_QUANT_TYPE = get_env("BNB_QUANT_TYPE", "nf4", str)
+BNB_DOUBLE_QUANT = get_env("BNB_DOUBLE_QUANT", False, bool)
+BNB_COMPUTE_DTYPE = get_env("BNB_COMPUTE_DTYPE", torch.bfloat16, torch.dtype)
 
 
 def load_model_and_tokenizer(model_name: str):

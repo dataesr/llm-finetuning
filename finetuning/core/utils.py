@@ -126,3 +126,23 @@ def model_delete_dir(model_dir: str):
         logger.info(f"✅ Model folder {dir_path} deleted")
     except Exception as error:
         logger.debug(f"Cannot delete folder {dir_path}: {error}")
+        
+        
+        
+def get_env(var_name, default_value, caster):
+    """
+    Read an environment variable and cast it, falling back to default on missing/invalid values.
+
+    Args:
+    - var_name: environment variable name
+    - default_value: fallback value when env var is missing
+    - caster: callable to cast the string value (e.g., int, float)
+    """
+    value = os.getenv(var_name)
+    if value is None:
+        return default_value
+    try:
+        return caster(value)
+    except Exception:
+        logger.warning(f"⚠️ Invalid value for {var_name}='{value}', using default {default_value}")
+        return default_value
