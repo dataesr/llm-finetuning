@@ -7,6 +7,7 @@ from shared.logger import get_logger
 logger = get_logger(name=__name__)
 
 FOLDER = "datasets"
+FOLDER_EXTRAS = "extras"
 
 TEXT_FIELD = "text"
 INSTRUCTION_FILENAME = "instruction.txt"
@@ -102,16 +103,29 @@ def get_commit_hash(dataset: Dataset) -> str | None:
     return commit_hash
 
 
-def get_dataset_extras(repo_id: str) -> dict:
+def get_dataset_extras(path_or_name: str, from_disk: bool = False) -> dict:
     """
-    Get extras from huggingface dataset
+    Get extras from dataset
 
     Args:
-        repo_id (str): Huggingface dataset repository
+        path_or_name (str): ovh file path or Huggingface dataset repository name
     Returns:
         extras (dict): extras json data
     """
-    extras = get_json_from_hub(filename="extras.json", repo_id=repo_id, repo_type="dataset")
+    if from_disk:
+        if not path_or_name.endswith(".json"):
+            logger.error(f"Extras file {path_or_name} is not a json file!")
+            raise ValueError(f"Extras file {path_or_name} is not a json file!")
+        path_on_disk = get_file(f"{FOLDER_EXTRAS}/{path_or_name}", check=True)
+        try:
+            with open(path_on_disk, "r") as json_file:
+                extras = json.load(json_file)
+        except Exception as error:
+            logger.error(f"Error parsing json from {path_on_disk}!")
+            raise ValueError(str(error))
+    else:
+        extras = get_json_from_hub(filename="extras.json", repo_id=path_or_name, repo_type="dataset")
+
     logger.debug(f"extras: {extras}")
     return extras
 

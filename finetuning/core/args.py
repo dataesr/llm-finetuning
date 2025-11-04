@@ -40,6 +40,12 @@ def get_args():
         choices=["auto", "text", "conversational"],
         help="How to format the dataset, either 'auto', 'text' or 'conversational'",
     )
+    parser.add_argument(
+        "--dataset_extras_path",
+        type=str,
+        default=None,
+        help="Extras dataset params file path (should be store on llm-datasets/extras)",
+    )
 
     # HuggingFace args
     parser.add_argument("--hf_hub", type=str, default=None, help="Push the model to a Huggin Face Hub")
