@@ -103,28 +103,28 @@ def get_commit_hash(dataset: Dataset) -> str | None:
     return commit_hash
 
 
-def get_dataset_extras(path_or_name: str, from_disk: bool = False) -> dict:
+def get_dataset_extras(name: str) -> dict:
     """
     Get extras from dataset
 
     Args:
-        path_or_name (str): ovh file path or Huggingface dataset repository name
+        path_or_name (str): ovh file path
     Returns:
         extras (dict): extras json data
     """
-    if from_disk:
-        if not path_or_name.endswith(".json"):
-            logger.error(f"Extras file {path_or_name} is not a json file!")
-            raise ValueError(f"Extras file {path_or_name} is not a json file!")
-        path_on_disk = get_file(f"{FOLDER_EXTRAS}/{path_or_name}", check=True)
-        try:
-            with open(path_on_disk, "r") as json_file:
-                extras = json.load(json_file)
-        except Exception as error:
-            logger.error(f"Error parsing json from {path_on_disk}!")
-            raise ValueError(str(error))
-    else:
-        extras = get_json_from_hub(filename="extras.json", repo_id=path_or_name, repo_type="dataset")
+    if not name:
+        return None
+
+    path = os.path.join(FOLDER_EXTRAS, name)
+    if not path.endswith(".json"):
+        path += ".json"
+    path_on_disk = get_file(path, check=True)
+    try:
+        with open(path_on_disk, "r") as json_file:
+            extras = json.load(json_file)
+    except Exception as error:
+        logger.error(f"Error parsing json from {path_on_disk}!")
+        raise ValueError(str(error))
 
     logger.debug(f"extras: {extras}")
     return extras
