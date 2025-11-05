@@ -41,10 +41,10 @@ def get_args():
         help="How to format the dataset, either 'auto', 'text' or 'conversational'",
     )
     parser.add_argument(
-        "--dataset_extras_path",
+        "--dataset_extras_name",
         type=str,
         default=None,
-        help="Extras dataset params file path (should be store on llm-datasets/extras)",
+        help="Extras dataset params file name (should be store on llm-datasets/extras)",
     )
 
     # HuggingFace args
