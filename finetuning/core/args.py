@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument(
         "--pipeline",
         type=str,
-        choices=["causallm", "nuextract"],
+        choices=["causallm", "causallm-unsloth"],
         default="causallm",
         help="Force a finetuning pipeline (eg llama (causallm), custom, ..)",
     )

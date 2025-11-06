@@ -7,3 +7,4 @@ peft==0.17.1
 transformers==4.56.2
 trl==0.23.0
 wandb==0.22.2
+# unsloth==2025.11.1
