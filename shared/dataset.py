@@ -227,7 +227,9 @@ def construct_prompts(
             # Non-conversational (Alpaca-style prompt-response text)
             instruction = custom_instruction or "You are an helpful assistant."
             text_format = custom_text_format if custom_text_format else DEFAULT_TEXT_FORMAT
-            text = text_format.format(instruction, example[INPUT_FIELD], example[COMPLETION_FIELD])
+            text = text_format.format(
+                instruction=instruction, input=example[INPUT_FIELD], response=example[COMPLETION_FIELD]
+            )
             return {prompts_field: text}
 
     dataset = dataset.map(map_conversations).select_columns([prompts_field])
