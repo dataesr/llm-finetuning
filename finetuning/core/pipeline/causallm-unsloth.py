@@ -1,12 +1,12 @@
 from datasets import Dataset
-from peft import TaskType
 from transformers.data.data_collator import DataCollatorForSeq2Seq
-from trl import SFTConfig, SFTTrainer
-from finetuning.core.utils import get_env, model_get_checkpoints_dir, model_get_finetuned_dir, model_get_output_dir
-from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
-from shared.utils import should_use_conversational_format
+# unlosth has to be imported before trl see https://stackoverflow.com/questions/79663362/sfttrainer-the-specified-eos-token-eos-token-is-not-found-in-the-vocabu
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import train_on_responses_only
+from trl import SFTConfig, SFTTrainer
+from core.utils import get_env, model_get_checkpoints_dir, model_get_finetuned_dir, model_get_output_dir
+from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
+from shared.utils import should_use_conversational_format
 import torch
 from shared.logger import get_logger
 
@@ -141,10 +141,12 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         logging_steps=LOG_STEPS,
         optim=OPTIM,
         weight_decay=WEIGHT_DECAY,
-        lr_scheduler_type="linear",
+        lr_scheduler_type=LR_SCHEDULER,
+        bf16=False,  # doesnt work on non ampere gpu apparently
+        fp16=True,
         seed=69,
         output_dir=model_get_checkpoints_dir(model_dir),
-        report_to="wandb",  # Use TrackIO/WandB etc
+        report_to="wandb",
         max_length=MAX_SEQ_LENGTH,
         packing=False,  # Can make training 5x faster for short sequences.
     )
@@ -155,7 +157,6 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         train_dataset=dataset,
         processing_class=tokenizer,
         args=training_args,
-        max_seq_length=MAX_SEQ_LENGTH,
         data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer),
     )
 
@@ -199,7 +200,8 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     logger.info(f"▶️ Start unsloth-causallm finetuning pipeline")
 
     # Dataset custom prompts params
-    dataset_extras = kwargs.get("dataset_extras", {})
+    dataset_extras = kwargs.get("dataset_extras") or {}
+    dataset_format = dataset_extras.get("dataset_format") or kwargs.get("dataset_format")
     custom_instruction = dataset_extras.get(INSTRUCTION_FIELD)
     custom_text_format = dataset_extras.get(TEXT_FORMAT_FIELD)
     instruction_part = dataset_extras.get("instruction_part")
@@ -209,7 +211,7 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     model, tokenizer = load_model_and_tokenizer(model_name)
 
     # Format dataset for training
-    use_conversational_format = should_use_conversational_format(kwargs.get("dataset_format"), tokenizer.chat_template)
+    use_conversational_format = should_use_conversational_format(dataset_format, tokenizer.chat_template)
     dataset = construct_prompts(
         dataset,
         custom_instruction=custom_instruction,

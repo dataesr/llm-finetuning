@@ -37,7 +37,7 @@ def main():
             pipeline_name=args.pipeline,
             dataset_name=args.dataset_name,
             dataset_format=args.dataset_format,
-            dataset_extras_name=args.dataset_extras_name,
+            dataset_config=args.dataset_config,
         )
 
         # Push model to huggingface

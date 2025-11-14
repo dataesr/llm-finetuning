@@ -194,14 +194,16 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     logger.info(f"▶️ Start causalLM finetuning pipeline")
 
     # Dataset custom prompts params
-    custom_instruction = kwargs.get("dataset_extras", {}).get(INSTRUCTION_FIELD)
-    custom_text_format = kwargs.get("dataset_extras", {}).get(TEXT_FORMAT_FIELD)
+    dataset_extras = kwargs.get("dataset_extras") or {}
+    dataset_format = dataset_extras.get("dataset_format") or kwargs.get("dataset_format")
+    custom_instruction = dataset_extras.get(INSTRUCTION_FIELD)
+    custom_text_format = dataset_extras.get(TEXT_FORMAT_FIELD)
 
     # Load the model and the tokenizer
     model, tokenizer = load_model_and_tokenizer(model_name)
 
     # Format dataset for training
-    use_conversational_format = should_use_conversational_format(kwargs.get("dataset_format"), tokenizer.chat_template)
+    use_conversational_format = should_use_conversational_format(dataset_format, tokenizer.chat_template)
     dataset = construct_prompts(
         dataset,
         custom_instruction=custom_instruction,

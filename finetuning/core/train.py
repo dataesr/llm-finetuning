@@ -16,7 +16,7 @@ def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_nam
     # Load dataset
     dataset = get_dataset(dataset_name)
     dataset_format = kwargs.get("dataset_format")
-    dataset_extras = get_dataset_extras(kwargs.get("dataset_extras_name"))
+    dataset_extras = get_dataset_extras(kwargs.get("dataset_config"), dataset_name)
     wandb_add_dataset_artifact(
         dataset_name=dataset_name,
         dataset=dataset,

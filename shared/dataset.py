@@ -103,7 +103,7 @@ def get_commit_hash(dataset: Dataset) -> str | None:
     return commit_hash
 
 
-def get_dataset_extras(name: str) -> dict:
+def get_dataset_extras(name: str, dataset_name: str) -> dict:
     """
     Get extras from dataset
 
@@ -115,7 +115,7 @@ def get_dataset_extras(name: str) -> dict:
     if not name:
         return None
 
-    path = os.path.join(FOLDER_EXTRAS, name)
+    path = os.path.join(FOLDER_EXTRAS, dataset_name, name)
     if not path.endswith(".json"):
         path += ".json"
     path_on_disk = get_file(path, check=True)
