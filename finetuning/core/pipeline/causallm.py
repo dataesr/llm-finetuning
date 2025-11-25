@@ -3,6 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
+from core.mlflow import mlflow_run_name
 from core.utils import get_env, model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
@@ -125,7 +126,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         save_steps=SAVE_STEPS,
         logging_steps=LOG_STEPS,
         packing=False,
-        report_to="wandb",
+        report_to="mlflow",
     )
 
     # Build sft trainer

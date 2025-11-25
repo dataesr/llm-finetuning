@@ -146,7 +146,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         fp16=True,
         seed=69,
         output_dir=model_get_checkpoints_dir(model_dir),
-        report_to="wandb",
+        report_to="mlflow",
         max_length=MAX_SEQ_LENGTH,
         packing=False,  # Can make training 5x faster for short sequences.
     )

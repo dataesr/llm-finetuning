@@ -7,7 +7,6 @@ from core.args import get_args
 from core.utils import model_delete_dir, model_initialize_dir
 from core.train import model_train
 from core.push import model_push_to_hub
-from core.wandb import wandb_add_model_artifact, wandb_finish, wandb_init
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,10 +24,7 @@ def main():
         logger.debug(f"Start fine-tuning script with args {args}")
 
         # Initalize model folder
-        model_output_name, model_dir = model_initialize_dir(model_name)
-
-        # Initialize wandb
-        wandb_init(model_output_name)
+        _, model_dir = model_initialize_dir(model_name)
 
         # Start model training
         model_train(
@@ -47,12 +43,6 @@ def main():
             hf_hash = model_push_to_hub(model_dir, hf_hub, args.hf_hub_private)
             if hf_hash:
                 model_delete_dir(model_dir)
-
-        # Store model artifact
-        wandb_add_model_artifact(model_name=model_name, model_dir=model_dir, hf_hub=hf_hub, hf_hash=hf_hash)
-
-        # Finish wandb
-        wandb_finish()
 
     ### Upload model to hub
     elif script_mode == "push":

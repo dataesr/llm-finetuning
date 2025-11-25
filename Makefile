@@ -19,15 +19,13 @@ docker-build-inference:
 # Push Docker image for finetuning
 docker-push-finetuning:
 	@echo Pushing a new docker image
-	docker push $(GHCR_IMAGE_NAME)-finetuning:$(CURRENT_VERSION)
-	docker push $(GHCR_IMAGE_NAME)-finetuning:latest
+	docker push $(GHCR_IMAGE_NAME)-finetuning --all-tags
 	@echo Docker image pushed
 
 # Push Docker image for inference
 docker-push-inference:
 	@echo Pushing a new docker image
-	docker push $(GHCR_IMAGE_NAME)-inference:$(CURRENT_VERSION)
-	docker push $(GHCR_IMAGE_NAME)-inference:latest
+	docker push $(GHCR_IMAGE_NAME)-inference --all-tags
 	@echo Docker image pushed
 
 release:
