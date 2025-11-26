@@ -5,6 +5,11 @@ from shared.utils import create_folder, reset_folder
 
 logger = get_logger(__name__)
 
+def hf_get_push_repo(check:bool=False):
+    hf_repo = os.getenv("HF_PUSH_REPO")
+    if check and not hf_repo:
+        raise ValueError(f"Env var 'HF_PUSH_REPO' not defined!") 
+
 def model_default_output_name(model_name: str, suffix: str = None) -> str:
     """
     Get default output name from base model name

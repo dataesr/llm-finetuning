@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   curl \
   unzip \
+  git \
   python3 \
   python3-dev \
   python3-pip \

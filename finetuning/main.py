@@ -37,24 +37,19 @@ def main():
         )
 
         # Push model to huggingface
-        hf_hub = args.hf_hub
-        hf_hash = None
-        if hf_hub:
-            hf_hash = model_push_to_hub(model_dir, hf_hub, args.hf_hub_private)
-            if hf_hash:
-                model_delete_dir(model_dir)
+        hf_hash = model_push_to_hub(model_dir)
+        if hf_hash:
+            model_delete_dir(model_dir)
 
     ### Upload model to hub
     elif script_mode == "push":
 
         if not args.push_model_dir:
             raise ValueError("--push_model_dir must be specified in push mode")
-        if not args.hf_hub:
-            raise ValueError("--hf_hub must be specified in push mode")
 
         logger.debug(f"Start pushing model to hugging face hub with args {args}")
 
-        model_push_to_hub(args.push_model_dir, args.hf_hub, args.hf_hub_private)
+        model_push_to_hub(args.push_model_dir, check_repo=True)
         model_delete_dir(args.push_model_dir)
 
     else:

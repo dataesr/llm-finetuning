@@ -1,7 +1,6 @@
 import os
 import json
 from datasets import load_dataset, Dataset
-from shared.hugging import get_json_from_hub
 from shared.logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -46,7 +45,7 @@ def get_file(object_name: str, check=False) -> str:
     return file_path
 
 
-def get_dataset(object_name: str) -> Dataset:
+def get_dataset(object_name: str, **kwargs) -> Dataset:
     """
     Get a dataset from huggingface (or storage).
 
@@ -55,6 +54,7 @@ def get_dataset(object_name: str) -> Dataset:
 
     Returns:
     - Dataset: dataset
+    - Dict: dataset extras (prompts params)
     """
 
     # Try to load from Hugging Face Hub
@@ -79,9 +79,21 @@ def get_dataset(object_name: str) -> Dataset:
         logger.error(f"Error while loading {object_name}")
         raise Exception(f"Error while loading {object_name}")
 
+    # Try yo load dataset extras
+    dataset_format = kwargs.get("dataset_format")
+    dataset_config = kwargs.get("dataset_config")  # extras config name
+    dataset_extras = get_dataset_extras(name=dataset_config, dataset_name=object_name)
+    if dataset_format:
+        if not dataset_extras:
+            dataset_extras = {"dataset_format": dataset_format}
+        elif dataset_extras.get("dataset_format"):
+            logger.warning(f"Dataset format {dataset_format} already defined in dataset extras {dataset_extras}")
+        else:
+            dataset_extras["dataset_format"] = dataset_format
+
     # TODO: add randomness
 
-    return dataset
+    return dataset, dataset_extras
 
 
 def get_commit_hash(dataset: Dataset) -> str | None:
@@ -126,7 +138,9 @@ def get_dataset_extras(name: str, dataset_name: str) -> dict:
         logger.error(f"Error parsing json from {path_on_disk}!")
         raise ValueError(str(error))
 
-    logger.debug(f"extras: {extras}")
+    logger.debug(f"Found dataset extras: {extras}")
+    if extras:
+        extras["dataset_config"] = extras.pop("name")
     return extras
 
 

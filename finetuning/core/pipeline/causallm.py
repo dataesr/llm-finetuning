@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from core.mlflow import mlflow_run_name
+from core.mlflow import mlflow_report_to, mlflow_log_model
 from core.utils import get_env, model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
@@ -12,6 +12,7 @@ from shared.logger import get_logger
 logger = get_logger(__name__)
 
 # Training arguments (https://huggingface.co/docs/transformers/en/main_classes/trainer)
+MAX_SEQ_LENGTH = get_env("MAX_SEQ_LENGTH", 8192, int)  # Prompts length
 NUM_TRAIN_EPOCHS = get_env("NUM_TRAIN_EPOCHS", 3, int)  # Number of training epochs
 MAX_STEPS = get_env("MAX_STEPS", -1, int)  # 5_000  # Number of training steps, should be set to -1 for full training
 BATCH_SIZE = get_env("BATCH_SIZE", 1, int)  # Batch size per device during training. Optimal given our GPU vram.
@@ -23,12 +24,12 @@ WEIGHT_DECAY = get_env("WEIGHT_DECAY", 0.001, float)
 MAX_GRAD_NORM = get_env("MAX_GRAD_NORM", 0.3, float)
 WARMUP_RATIO = get_env("WARMUP_RATIO", 0.03, float)
 SAVE_STEPS = get_env("SAVE_STEPS", 500, int)
-LOG_STEPS = get_env("LOG_STEPS", 1, int)
+LOG_STEPS = get_env("LOG_STEPS", 10, int)
 
 # LORA config (https://huggingface.co/docs/peft/package_reference/lora)
 LORA_R = get_env("LORA_R", 16, int)
 LORA_ALPHA = get_env("LORA_ALPHA", 2 * LORA_R, int)
-LORA_DROPOUT = get_env("LORA_DROPOUT", 0.1, float)
+LORA_DROPOUT = get_env("LORA_DROPOUT", 0.05, float)
 TASK_TYPE = TaskType.CAUSAL_LM
 
 # BitsAndBytesConfig int-4 config (https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/quantization#transformers.BitsAndBytesConfig)
@@ -53,12 +54,11 @@ def load_model_and_tokenizer(model_name: str):
     logger.info(f"Start loading model {model_name}")
 
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-    if not tokenizer:
-        # Use fast if tokenizer not correctly loaded
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "right"  # to prevent warnings
-    tokenizer.pad_token = tokenizer.eos_token
 
     # Load model in 4bit
     bnb_config = BitsAndBytesConfig(
@@ -126,7 +126,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         save_steps=SAVE_STEPS,
         logging_steps=LOG_STEPS,
         packing=False,
-        report_to="mlflow",
+        report_to=mlflow_report_to(),
     )
 
     # Build sft trainer
@@ -137,7 +137,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
     return trainer
 
 
-def merge_and_save_model(trainer, tokenizer, model_dir: str):
+def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
     """
     Save trained model and tokenizer.
 
@@ -149,38 +149,39 @@ def merge_and_save_model(trainer, tokenizer, model_dir: str):
     output_dir = model_get_output_dir(model_dir)
     logger.info(f"Start saving model to {output_dir}")
 
-    # Get model from trainer
-    model = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+    # Save adapters
+    trainer.save_model(output_dir)
+    tokenizer.save_pretrained(output_dir)
 
-    # Check if it's actually a PEFT model
-    if hasattr(model, "merge_and_unload"):
-        # It's a PeftModel, save adapters
-        model.save_pretrained(output_dir)
-        # Reload model
-        model = AutoPeftModelForCausalLM.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
-        # Merge model
-        model_merged = model.merge_and_unload()
-    else:
-        # Fallback - just save the adapter weights
-        logger.warning("⚠️ Could not merge PEFT weights, saving adapter only")
-
-        # Save adapter weights
-        trainer.save_model(output_dir)
-        tokenizer.save_pretrained(output_dir)
-
-        logger.info(f"✅ Fine-tuned adapters saved to {output_dir}")
-        torch.cuda.empty_cache()
-        return
-
-    # Save final merged model
-    output_merged_dir = model_get_finetuned_dir(model_dir)
-    model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
-    tokenizer.save_pretrained(output_merged_dir)
-
-    logger.info(f"✅ Fine-tuned model {model_dir} merged and saved to {output_merged_dir}")
-
-    # Cleanup
+    # Free VRAM
+    del trainer
     torch.cuda.empty_cache()
+
+    try:
+        # Merge model
+        logger.info("Loading PEFT model for merging...")
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            output_dir,
+            device_map="auto",
+            dtype=torch.bfloat16,  # Must be 16-bit for merging
+            low_cpu_mem_usage=True,
+        )
+        model_merged = model.merge_and_unload()
+
+        # Save merged model
+        output_merged_dir = model_get_finetuned_dir(model_dir)
+        model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
+        tokenizer.save_pretrained(output_merged_dir)
+
+        logger.info(f"✅ Fine-tuned model merged and saved to {output_merged_dir}")
+        mlflow_log_model(model_merged, tokenizer, model_name=model_name)
+
+        return model_merged, tokenizer
+
+    except Exception as error:
+        logger.error(f"Failed to merge model: {error}")
+        logger.warning("Adapters are saved, but merge failed.")
+        return None, tokenizer
 
 
 def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
@@ -196,7 +197,7 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
 
     # Dataset custom prompts params
     dataset_extras = kwargs.get("dataset_extras") or {}
-    dataset_format = dataset_extras.get("dataset_format") or kwargs.get("dataset_format")
+    dataset_format = dataset_extras.get("dataset_format")
     custom_instruction = dataset_extras.get(INSTRUCTION_FIELD)
     custom_text_format = dataset_extras.get(TEXT_FORMAT_FIELD)
 
@@ -218,4 +219,4 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, tokenizer, model_dir=model_dir)
+    merge_and_save_model(trainer, tokenizer, model_name=model_name, model_dir=model_dir)

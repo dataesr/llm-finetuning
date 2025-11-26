@@ -4,6 +4,7 @@ from transformers.data.data_collator import DataCollatorForSeq2Seq
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import train_on_responses_only
 from trl import SFTConfig, SFTTrainer
+from core.mlflow import mlflow_report_to, mlflow_log_model
 from core.utils import get_env, model_get_checkpoints_dir, model_get_finetuned_dir, model_get_output_dir
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
@@ -32,7 +33,7 @@ LORA_R = get_env("LORA_R", 16, int)
 LORA_ALPHA = get_env("LORA_ALPHA", 16, int)
 LORA_DROPOUT = get_env("LORA_DROPOUT", 0.0, float)
 
-MAX_SEQ_LENGTH = get_env("MAX_SEQ_LENGHT", 2048, int)  # Choose any! We auto support RoPE Scaling internally!
+MAX_SEQ_LENGTH = get_env("MAX_SEQ_LENGHT", 8192, int)  # Choose any! We auto support RoPE Scaling internally!
 
 dtype = None  # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
 load_in_4bit = True  # Use 4bit quantization to reduce memory usage. Can be False.
@@ -146,7 +147,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
         fp16=True,
         seed=69,
         output_dir=model_get_checkpoints_dir(model_dir),
-        report_to="mlflow",
+        report_to=mlflow_report_to(),
         max_length=MAX_SEQ_LENGTH,
         packing=False,  # Can make training 5x faster for short sequences.
     )
@@ -183,6 +184,7 @@ def merge_and_save_model(trainer, tokenizer, model_dir: str):
     model.save_pretrained_merged(save_directory=output_merged_dir, tokenizer=tokenizer, save_method="merged_16bit")
 
     logger.info(f"✅ Fine-tuned model {model_dir} merged and saved to {output_merged_dir}")
+    mlflow_log_model(model, tokenizer)
 
     # Cleanup
     torch.cuda.empty_cache()
@@ -201,7 +203,7 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
 
     # Dataset custom prompts params
     dataset_extras = kwargs.get("dataset_extras") or {}
-    dataset_format = dataset_extras.get("dataset_format") or kwargs.get("dataset_format")
+    dataset_format = dataset_extras.get("dataset_format")
     custom_instruction = dataset_extras.get(INSTRUCTION_FIELD)
     custom_text_format = dataset_extras.get(TEXT_FORMAT_FIELD)
     instruction_part = dataset_extras.get("instruction_part")

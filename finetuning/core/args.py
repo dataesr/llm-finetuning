@@ -47,8 +47,4 @@ def get_args():
         help="Dataset config file name for extras params (should be store on llm-datasets/extras)",
     )
 
-    # HuggingFace args
-    parser.add_argument("--hf_hub", type=str, default=None, help="Push the model to a Huggin Face Hub")
-    parser.add_argument("--hf_hub_private", action="store_true", help="If set, the hugging face hub will be private")
-
     return parser.parse_args()
