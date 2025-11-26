@@ -174,7 +174,7 @@ def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
         tokenizer.save_pretrained(output_merged_dir)
 
         logger.info(f"✅ Fine-tuned model merged and saved to {output_merged_dir}")
-        mlflow_log_model(model_merged, tokenizer, model_name=model_name)
+        mlflow_log_model(model_merged, tokenizer)
 
         return model_merged, tokenizer
 
