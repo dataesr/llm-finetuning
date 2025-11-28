@@ -46,7 +46,7 @@ def get_file(object_name: str, check=False) -> str:
     return file_path
 
 
-def get_dataset(object_name: str, dataset_split: str = None, as_pandas: bool = False, **kwargs) -> Dataset:
+def get_dataset(object_name: str, dataset_split: str = "train", as_pandas: bool = False, **kwargs) -> Dataset:
     """
     Get a dataset from huggingface (or storage).
 
@@ -59,13 +59,10 @@ def get_dataset(object_name: str, dataset_split: str = None, as_pandas: bool = F
     - Dataset: dataset
     - Dict: dataset extras (prompts params)
     """
-    # Get dataset split if needed
-    split = dataset_split or "train"
-
     # Try to load from Hugging Face Hub
     try:
         logger.debug(f"Trying to load {object_name} from Hugging Face...")
-        dataset = load_dataset(object_name, split=split)
+        dataset = load_dataset(object_name, split=dataset_split)
     except:
         logger.debug(f"Trying to load from storage...")
 
@@ -73,7 +70,7 @@ def get_dataset(object_name: str, dataset_split: str = None, as_pandas: bool = F
         file_path = get_file(object_name, check=True)
 
         # Load as dataset
-        dataset = load_dataset("json", data_files={split: [file_path]}, split=split)
+        dataset = load_dataset("json", data_files={dataset_split: [file_path]}, split=dataset_split)
 
     if dataset:
         logger.debug(f"✅ Dataset {object_name} loaded!")
