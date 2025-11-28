@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -85,3 +86,7 @@ def should_use_conversational_format(dataset_format_arg: str = None, dataset_cha
         else:
             logger.debug("Format automatically set to 'text'")
             return False
+
+
+def timestamp() -> str:
+    return time.strftime("%Y%m%d-%H%M%S")

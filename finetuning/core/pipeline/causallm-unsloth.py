@@ -4,8 +4,8 @@ from transformers.data.data_collator import DataCollatorForSeq2Seq
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import train_on_responses_only
 from trl import SFTConfig, SFTTrainer
-from core.mlflow import mlflow_report_to, mlflow_log_model
 from core.utils import get_env, model_get_checkpoints_dir, model_get_finetuned_dir, model_get_output_dir
+from shared.mlflow import mlflow_report_to, mlflow_log_model
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
 import torch

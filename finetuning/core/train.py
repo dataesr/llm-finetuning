@@ -1,6 +1,5 @@
 import importlib
-import torch
-from core.mlflow import mlflow_start, mlflow_end, mlflow_log_dataset, mlflow_log_prompts_params
+from shared.mlflow import mlflow_start, mlflow_end, mlflow_log_dataset, mlflow_log_params, mlflow_set_tags
 from shared.dataset import get_dataset
 from shared.logger import get_logger
 
@@ -10,16 +9,14 @@ logger = get_logger(__name__)
 def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_name: str, **kwargs) -> str:
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
 
-    # Cleanup
-    torch.cuda.empty_cache()
-
     # Start mlflow
     mlflow_start(model_name)
+    mlflow_set_tags({"model_name": model_name, "dataset_name": dataset_name})
 
     # Load dataset
     dataset, dataset_extras = get_dataset(dataset_name, **kwargs)
     mlflow_log_dataset(dataset_name, dataset)
-    mlflow_log_prompts_params(dataset_extras)
+    mlflow_log_params(dataset_extras)
 
     # Get pipeline
     pipeline = importlib.import_module(f"core.pipeline.{pipeline_name}")

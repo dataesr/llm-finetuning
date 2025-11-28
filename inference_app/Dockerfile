@@ -6,8 +6,8 @@ WORKDIR /
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
-  git \
   curl \
+  git \
   unzip \
   python3 \
   python3-dev \
@@ -48,4 +48,10 @@ RUN uv cache clean
 
 # Add all files to workpspace
 ADD shared /workspace/shared
-ADD inference /workspace
+ADD inference /workspace/shared
+
+# Clean cache and make sure user as rights
+# RUN uv cache clean && chown -R 42420:42420 /workspace/.cache
+
+# CMD ["python3", "train.py"]
+CMD ["uvicorn", "shared.app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "1200"]

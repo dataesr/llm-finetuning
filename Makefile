@@ -16,6 +16,12 @@ docker-build-inference:
 	docker build -f inference/Dockerfile -t $(GHCR_IMAGE_NAME)-inference:$(CURRENT_VERSION) -t $(GHCR_IMAGE_NAME)-inference:latest .
 	@echo "Inference Docker image built."
 
+# Build Docker image for inference
+docker-build-inference-app:
+	@echo "Building inference docker image..."
+	docker build -f inference_app/Dockerfile -t $(GHCR_IMAGE_NAME)-inference-app:$(CURRENT_VERSION) -t $(GHCR_IMAGE_NAME)-inference-app:latest .
+	@echo "Inference Dock
+
 # Push Docker image for finetuning
 docker-push-finetuning:
 	@echo Pushing a new docker image
@@ -28,8 +34,8 @@ docker-push-inference:
 	docker push $(GHCR_IMAGE_NAME)-inference --all-tags
 	@echo Docker image pushed
 
-release:
-	echo 'VERSION = "$(VERSION)"'' > shared/version.py
-	git commit -am '[release] version $(VERSION)'
-	git tag $(VERSION)
-	@echo If everything is OK, you can push with tags i.e. git push origin main --tags
+# Push Docker image for inference app
+docker-push-inference-app:
+	@echo Pushing a new docker image
+	docker push $(GHCR_IMAGE_NAME)-inference-app --all-tags
+	@echo Docker image pushed

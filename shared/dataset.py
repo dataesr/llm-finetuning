@@ -1,6 +1,7 @@
 import os
 import json
 from datasets import load_dataset, Dataset
+from shared.utils import timestamp
 from shared.logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -45,22 +46,26 @@ def get_file(object_name: str, check=False) -> str:
     return file_path
 
 
-def get_dataset(object_name: str, **kwargs) -> Dataset:
+def get_dataset(object_name: str, dataset_split: str = None, as_pandas: bool = False, **kwargs) -> Dataset:
     """
     Get a dataset from huggingface (or storage).
 
     Args:
     - object_name (str): huggingface path or ovh object_name
+    - dataset_split (str): dataset split. Defaults to 'train'
+    - as_pandas (bool): return DataFrame instead of Dataset
 
     Returns:
     - Dataset: dataset
     - Dict: dataset extras (prompts params)
     """
+    # Get dataset split if needed
+    split = dataset_split or "train"
 
     # Try to load from Hugging Face Hub
     try:
         logger.debug(f"Trying to load {object_name} from Hugging Face...")
-        dataset = load_dataset(object_name, split="train")
+        dataset = load_dataset(object_name, split=split)
     except:
         logger.debug(f"Trying to load from storage...")
 
@@ -68,7 +73,7 @@ def get_dataset(object_name: str, **kwargs) -> Dataset:
         file_path = get_file(object_name, check=True)
 
         # Load as dataset
-        dataset = load_dataset("json", data_files={"train": [file_path]}, split="train")
+        dataset = load_dataset("json", data_files={split: [file_path]}, split=split)
 
     if dataset:
         logger.debug(f"✅ Dataset {object_name} loaded!")
@@ -79,7 +84,7 @@ def get_dataset(object_name: str, **kwargs) -> Dataset:
         logger.error(f"Error while loading {object_name}")
         raise Exception(f"Error while loading {object_name}")
 
-    # Try yo load dataset extras
+    # Try to load dataset extras
     dataset_format = kwargs.get("dataset_format")
     dataset_config = kwargs.get("dataset_config")  # extras config name
     dataset_extras = get_dataset_extras(name=dataset_config, dataset_name=object_name)
@@ -91,7 +96,10 @@ def get_dataset(object_name: str, **kwargs) -> Dataset:
         else:
             dataset_extras["dataset_format"] = dataset_format
 
-    # TODO: add randomness
+    # TODO: add randomness ?
+
+    if as_pandas:
+        return dataset.to_pandas(), dataset_extras
 
     return dataset, dataset_extras
 
@@ -117,7 +125,7 @@ def get_commit_hash(dataset: Dataset) -> str | None:
 
 def get_dataset_extras(name: str, dataset_name: str) -> dict:
     """
-    Get extras from dataset
+    Get prompts extra params from dataset
 
     Args:
         path_or_name (str): ovh file path
@@ -142,43 +150,6 @@ def get_dataset_extras(name: str, dataset_name: str) -> dict:
     if extras:
         extras["dataset_config"] = extras.pop("name")
     return extras
-
-
-def save_dataset_extras(extras: dict, destination: str):
-    """
-    Save dataset extras as json in model folder
-
-    Args:
-        extras (dict): Extras from dataset
-        destination (str): Fine tuned model directory
-    """
-    if not extras:
-        logger.debug("No extras to save")
-        return
-
-    # Save in model folder
-    with open(f"{destination}/extras.json", "w") as file:
-        json.dump(extras, file, indent=4)
-
-    logger.debug(f"✅ Extras from dataset saved in {destination}")
-
-
-def save_dataset_instruction(dataset: Dataset, destination: str):
-    """
-    Save dataset instruction as file in model folder
-
-    Args:
-        dataset: Dataset used for fine tuning
-        destination (str): Fine tuned model directory
-    """
-    # Get instruction from dataset
-    instruction = dataset[0][INSTRUCTION_FIELD]
-
-    # Save in model folder
-    with open(f"{destination}/{INSTRUCTION_FILENAME}", "w") as file:
-        file.write(instruction)
-
-    logger.debug(f"✅ Instruction from dataset saved in {destination}")
 
 
 def construct_one_conversation(user: str, system: str = None, assistant: str = None):

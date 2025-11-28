@@ -3,8 +3,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, AutoPeftModelForCausalLM, TaskType, prepare_model_for_kbit_training
 from trl import SFTConfig, SFTTrainer
 from datasets import Dataset
-from core.mlflow import mlflow_report_to, mlflow_log_model
 from core.utils import get_env, model_get_checkpoints_dir, model_get_output_dir, model_get_finetuned_dir
+from shared.mlflow import mlflow_report_to, mlflow_log_model
 from shared.dataset import INSTRUCTION_FIELD, TEXT_FORMAT_FIELD, construct_prompts
 from shared.utils import should_use_conversational_format
 from shared.logger import get_logger

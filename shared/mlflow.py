@@ -47,7 +47,7 @@ def mlflow_log_dataset(dataset_name: str, dataset: Dataset, **metadata):
         mlflow_dataset = MetaDataset(source=dataset_source, name=name)
         mlflow.log_input(dataset, context="training", tags=metadata)
 
-def mlflow_log_prompts_params(params: dict):
+def mlflow_log_params(params: dict):
     if not mlflow_enabled():
         return
 
@@ -56,7 +56,19 @@ def mlflow_log_prompts_params(params: dict):
             mlflow.log_param(key, value)
         else:
             mlflow.log_text(text=str(value), artifact_file=f"{key}.txt")
+            
+def mlflow_set_tags(tags: dict):
+    if not mlflow_enabled():
+        return
+    
+    mlflow.set_tags(tags)
 
+def mlflow_log_artifact(local_path: str, artifact_path: str = None):
+    if not mlflow_enabled():
+        return
+
+    mlflow.log_artifact(local_path=local_path, artifact_path=artifact_path)
+    
 def mlflow_log_lora_adapters(local_path: str):
     if not mlflow_enabled():
         return
@@ -69,6 +81,17 @@ def mlflow_log_model(model, tokenizer):
 
     model_name = os.getenv("MLFLOW_MODEL_NAME") or os.getenv("HF_PUSH_REPO") or "model"
     mlflow.transformers.log_model(transformers_model={"model": model, "tokenizer": tokenizer}, tokenizer=tokenizer, name=model_name)
+
+def mlflow_active_model(model_id: str = None):
+    if not mlflow_enabled():
+        return
+    
+    model_id = os.getenv("MLFLOW_MODEL_ID") or model_id
+    if not model_id:
+        logger.warning(f"No model_id found, traces won't be linked to a model!")
+        return
+
+    mlflow.set_active_model(model_id=model_id)
 
 def mlflow_start(model_name: str):
     if not mlflow_enabled():

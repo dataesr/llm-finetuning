@@ -2,13 +2,16 @@
 
 ```make docker-build-finetuning``` --> build the finetuning image
 ```make docker-build-inference``` --> build the inference image
+```make docker-build-inference-app``` --> build the inference app image
+
 
 ```make docker-push-finetuning``` --> push the finetuning image
 ```make docker-push-inference``` --> push the inference image
+```make docker-push-inference-app``` --> push the inference app image
+
 
 
 > launch finetuning job on ovh
-
 `ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-jobs@1azgra:/workspace/jobs:rwd --env HF_TOKEN=<huggingface_token> <other_envs> ghcr.io/dataesr/llm-finetuning:latest -- uv run main.py  --mode ["train", "push"] --model_name <huggingface_model_name> --pipeline ["causallm", "custom"] --dataset_name <dataset_name_from_object_storage> --dataset_config <dataset_config_name> --dataset_format <dataset_format> --push_model_dir <dir_of_finetuned_model>`
 
 examples:
@@ -24,11 +27,13 @@ examples:
 - Delete all jobs files
 `ovhai bucket object delete llm-jobs@1azgra --all --yes`
 
+> Launch inference job on ovh
+`ovhai job run  --gpu 1 --volume llm-datasets@1azgra:/workspace/datasets:ro --volume llm-completions@1azgra:/workspace/completions:rwd --env HF_TOKEN=<huggingface_token> <other_envs> ghcr.io/dataesr/llm-inference:latest -- uv run main.py --model_name <huggingface_model_name> --dataset_name <dataset_name_from_object_storage> --dataset_split <dataset_split> --dataset_config <dataset_config_name>`
 
 > Launch inference app on ovh
-`ovhai app run --gpu 1 --env HF_TOKEN=<huggingface_token> --env MODEL_NAME=<huggingface_model_name> --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference:latest`
+`ovhai app run --gpu 1 --env HF_TOKEN=<huggingface_token> --env MODEL_NAME=<huggingface_model_name> --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference-app:latest`
 
-`ovhai app run --gpu 1 --env HF_TOKEN=hf_abcdef --env MODEL_NAME=dataesr/openchat-3.6-8b-acknowledgments --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference:latest`
+`ovhai app run --gpu 1 --env HF_TOKEN=hf_abcdef --env MODEL_NAME=dataesr/openchat-3.6-8b-acknowledgments --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference-app:latest`
 
 
 > Environment variables
