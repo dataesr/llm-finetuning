@@ -4,7 +4,7 @@
 """
 
 from core.args import get_args
-from inference.core.inference import inference
+from core.inference import inference
 from shared.logger import get_logger
 
 logger = get_logger(__name__)

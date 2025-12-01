@@ -21,13 +21,13 @@ def load_engine(model_name):
     engine = LLM(
         model=model_name,
         quantization="bitsandbytes",
-        dtype="bfloat16",
+        dtype="bfloat16",  # V100 doesnt support bfloat16
         tensor_parallel_size=1,  # torch.cuda.device_count()
         trust_remote_code=True,
         # enforce_eager=True,
         disable_custom_all_reduce=True,
         disable_log_stats=False,
-        max_model_len=8192,
+        max_model_len=12288,  # TODO: compute expected max len
     )
     logger.info(f"✅ vLLM engine {VLLM_VERSION} loaded")
 
@@ -49,20 +49,20 @@ def generate(
     formatted_prompts = apply_chat_template(tokenizer, prompts, prompts_params=prompts_params)
 
     # Sampling params
-    max_length = tokenizer.model_max_length
-    truncate_length = max_length if isinstance(max_length, int) and max_length < 1_000_000 else 8192
+    # max_length = tokenizer.model_max_length
+    # truncate_length = max_length if isinstance(max_length, int) and max_length < 1_000_000 else 8192
     full_params = {
         "seed": 0,
         "temperature": 0,
-        "max_tokens": max_length,
+        "max_tokens": 2048,
         "skip_special_tokens": True,
-        "truncate_prompt_tokens": truncate_length,
+        # "truncate_prompt_tokens": truncate_length,
         **sampling_params,
     }
     mlflow_log_params(full_params)
 
     # Generate outputs
-    outputs = engine.generate(formatted_prompts, SamplingParams(**full_params))
+    outputs = engine.generate(formatted_prompts, SamplingParams(**full_params), use_tqdm=True)
     completions = [output.outputs[0].text for output in outputs]
     logger.debug(f"Generated {len(completions)} completions")
 

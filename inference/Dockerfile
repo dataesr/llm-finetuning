@@ -6,9 +6,9 @@ WORKDIR /
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
-  git \
   curl \
   unzip \
+  git \
   python3 \
   python3-dev \
   python3-pip \
@@ -29,9 +29,9 @@ ENV HOME=/workspace
 # RUN python3 -m venv venv
 # ENV PATH="./venv/bin:$PATH"
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH=".local/bin:${PATH}"
+ENV PATH="$HOME/.local/bin/:$PATH"
 RUN uv venv --python 3.12 --seed
-ENV PATH=".venv/bin:${PATH}"
+ENV PATH="$HOME/.venv/bin:$PATH"
 
 # Install PyTorch for cuda 12.6
 # RUN pip install --upgrade pip 

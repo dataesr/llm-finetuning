@@ -35,14 +35,18 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", d
     prompts = get_prompts(dataset)
 
     # Generate completions
-    completions = generate(model_name, prompts=prompts, prompts_params=dataset_extras)
+    completions = generate(
+        model_name,
+        prompts=prompts,
+        prompts_params=dataset_extras,
+        sampling_params={},  # TODO: sampling params
+    )
 
     # Write results
     output_file = merge_and_save(dataset, completions)
 
     # Log results as artifact
     mlflow_log_artifact(output_file)
-
     mlflow_end()
 
-    print(f"✅ Done! Results saved to {output_file} and logged to MLflow.")
+    logger.info(f"✅ Inference done! Results saved to {output_file}")
