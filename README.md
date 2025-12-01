@@ -33,18 +33,18 @@ examples:
 > Launch inference app on ovh
 `ovhai app run --gpu 1 --env HF_TOKEN=<huggingface_token> --env MODEL_NAME=<huggingface_model_name> --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference-app:latest`
 
-`ovhai app run --gpu 1 --env HF_TOKEN=hf_abcdef --env MODEL_NAME=dataesr/openchat-3.6-8b-acknowledgments --default-http-port 8000 --unsecure-http ghcr.io/dataesr/llm-inference-app:latest`
-
 
 > Environment variables
-- General
-HF_TOKEN            = HuggingFace token
-HF_PUSH_REPO        = HuggingFace repository (will try to push finetuned model to repo if defined)
-MLFLOW_TRACKING_URI = Mlflow tracking url (mlflow tracking disabled if not set)
-MLFLOW_RUN_NAME     = Mlflow tracking run name
-MLFLOW_RUN_NAME_TAG = Suffix for auto generated run name if MLFLOW_RUN_NAME not set
-MLFLOW_MODEL_NAME   = Name for model logged into Mlflow
-- Training params
-MAX_SEQ_LENGTH, NUM_TRAIN_EPOCHS, MAX_STEPS, BATCH_SIZE, GRAD_ACC_STEPS, OPTIM, LEARNING_RATE, LR_SCHEDULER, WEIGHT_DECAY, MAX_GRAD_NORM, WARMUP_RATIO, SAVE_STEPS, LOG_STEPS
-LORA_R, LORA_ALPHA, LORA_DROPOUT, TASK_TYPE
-BNB_4BIT, BNB_QUANT_TYPE, BNB_DOUBLE_QUANT, BNB_COMPUTE_DTYPE
+General
+- HF_TOKEN            = HuggingFace token
+- HF_PUSH_REPO        = HuggingFace repository (will try to push finetuned model to repo if defined)
+- MLFLOW_TRACKING_URI = Mlflow tracking url (mlflow tracking disabled if not set)
+- MLFLOW_RUN_NAME     = Mlflow tracking run name
+- MLFLOW_RUN_NAME_TAG = Suffix for auto generated run name if MLFLOW_RUN_NAME not set
+- MLFLOW_EXPERIMENT_NAME = Mlflow tracking experiment name
+- MLFLOW_MODEL_NAME = Name for model logged into Mlflow
+
+Training params (finetuning)
+- MAX_SEQ_LENGTH, NUM_TRAIN_EPOCHS, MAX_STEPS, BATCH_SIZE, GRAD_ACC_STEPS, OPTIM, LEARNING_RATE, LR_SCHEDULER, WEIGHT_DECAY, MAX_GRAD_NORM, WARMUP_RATIO, SAVE_STEPS, LOG_STEPS
+- LORA_R, LORA_ALPHA, LORA_DROPOUT, TASK_TYPE
+- BNB_4BIT, BNB_QUANT_TYPE, BNB_DOUBLE_QUANT, BNB_COMPUTE_DTYPE

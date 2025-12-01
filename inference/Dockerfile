@@ -49,3 +49,5 @@ RUN uv cache clean
 # Add all files to workpspace
 ADD shared /workspace/shared
 ADD inference /workspace
+
+# CMD ["uv", "run", "main.py"]

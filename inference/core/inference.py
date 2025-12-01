@@ -13,7 +13,7 @@ from shared.logger import get_logger
 logger = get_logger(__name__)
 
 
-def inference(model_name: str, dataset_name: str, dataset_split: str = None, dataset_config: str = None):
+def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", dataset_config: str = None):
 
     logger.info(f"🚀 Start inference of model {model_name} with dataset {dataset_name}")
 
@@ -25,9 +25,13 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = None, dat
     # mlflow_active_model()
 
     # Load dataset
-    split = dataset_split or "eval"
-    dataset, dataset_extras = get_dataset(dataset_name, dataset_split=split, dataset_config=dataset_config, as_pandas=True)
-    mlflow_set_tags({"dataset_name": dataset_name, "dataset_split": split})
+    dataset, dataset_extras = get_dataset(
+        dataset_name,
+        dataset_split=dataset_split,
+        dataset_config=dataset_config,
+        as_pandas=True,
+    )
+    mlflow_set_tags({"dataset_name": dataset_name, "dataset_split": dataset_split})
     prompts = get_prompts(dataset)
 
     # Generate completions

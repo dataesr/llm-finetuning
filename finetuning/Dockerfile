@@ -50,8 +50,4 @@ RUN uv cache clean
 COPY shared /workspace/shared
 COPY finetuning /workspace
 
-# Clean cache and make sure user as rights
-# RUN uv cache clean && chown -R 42420:42420 /workspace/.cache
-
-# CMD ["python3", "train.py"]
-# CMD ["uv", "run", "train.py"]
+# CMD ["uv", "run", "main.py"]
