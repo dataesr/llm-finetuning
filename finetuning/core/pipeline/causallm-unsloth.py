@@ -164,7 +164,7 @@ def build_trainer(model, tokenizer, dataset: Dataset, model_dir: str) -> SFTTrai
     return trainer
 
 
-def merge_and_save_model(trainer, tokenizer, model_dir: str):
+def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
     """
     Save trained model and tokenizer.
 
@@ -173,8 +173,7 @@ def merge_and_save_model(trainer, tokenizer, model_dir: str):
     - tokenizer: tokenizer to save
     - model_dr (str): model directory
     """
-    output_dir = model_get_output_dir(model_dir)
-    logger.info(f"Start saving model to {output_dir}")
+    logger.info(f"Start saving finetuned model")
 
     # Get model from trainer
     model = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
@@ -183,8 +182,8 @@ def merge_and_save_model(trainer, tokenizer, model_dir: str):
     output_merged_dir = model_get_finetuned_dir(model_dir)
     model.save_pretrained_merged(save_directory=output_merged_dir, tokenizer=tokenizer, save_method="merged_16bit")
 
-    logger.info(f"✅ Fine-tuned model {model_dir} merged and saved to {output_merged_dir}")
-    mlflow_log_model(model, tokenizer)
+    logger.info(f"✅ Model merged and saved to {output_merged_dir}")
+    mlflow_log_model(model_name, model, tokenizer)
 
     # Cleanup
     torch.cuda.empty_cache()
@@ -234,4 +233,4 @@ def train(model_name: str, model_dir: str, dataset: Dataset, **kwargs):
     logger.info("✅ Model trained")
 
     # Save the model
-    merge_and_save_model(trainer, tokenizer, model_dir=model_dir)
+    merge_and_save_model(trainer, tokenizer, model_name=model_name, model_dir=model_dir)

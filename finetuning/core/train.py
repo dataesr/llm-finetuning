@@ -1,5 +1,5 @@
 import importlib
-from shared.mlflow import mlflow_start, mlflow_end, mlflow_log_dataset, mlflow_log_params, mlflow_set_tags
+from shared.mlflow import mlflow_start, mlflow_end, mlflow_log_dataset, mlflow_log_params
 from shared.dataset import get_dataset
 from shared.logger import get_logger
 
@@ -10,8 +10,7 @@ def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_nam
     logger.info(f"🚀 Start fine tuning of model {model_name} with dataset {dataset_name}")
 
     # Start mlflow
-    mlflow_start(model_name)
-    mlflow_set_tags({"model_name": model_name, "dataset_name": dataset_name})
+    mlflow_start(model_name, run_type="training", tags={"model_name": model_name, "dataset_name": dataset_name})
 
     # Load dataset
     dataset, dataset_extras = get_dataset(dataset_name, **kwargs)

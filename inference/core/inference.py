@@ -2,7 +2,13 @@ import os
 import pandas as pd
 from core.generate import generate
 from core.prompts import get_prompts
-from shared.mlflow import mlflow_start, mlflow_end, mlflow_set_tags, mlflow_active_model, mlflow_log_artifact
+from shared.mlflow import (
+    mlflow_start,
+    mlflow_end,
+    mlflow_active_model,
+    mlflow_log_artifact,
+    mlflow_log_dataset,
+)
 from shared.dataset import get_dataset
 from shared.utils import timestamp
 from shared.logger import get_logger
@@ -44,11 +50,9 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", d
     logger.info(f"🚀 Start inference of model {model_name} with dataset {dataset_name}")
 
     # Start mlflow run
-    mlflow_start(model_name)
-    mlflow_set_tags({"model_name": model_name, "dataset_name": model_name})
+    mlflow_start(model_name, run_type="inference", tags={"model_name": model_name, "dataset_name": model_name})
     mlflow_active_model()
     # mlflow_log_params()
-    # mlflow_active_model()
 
     # Load dataset
     dataset, dataset_extras = get_dataset(
@@ -57,7 +61,9 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", d
         dataset_config=dataset_config,
         as_pandas=True,
     )
-    mlflow_set_tags({"dataset_name": dataset_name, "dataset_split": dataset_split})
+    mlflow_log_dataset(dataset_name, dataset, dataset_split=dataset_split)
+
+    # Get prompts from dataset
     prompts = get_prompts(dataset)
 
     # Generate completions

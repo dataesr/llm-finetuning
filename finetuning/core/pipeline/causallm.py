@@ -147,7 +147,7 @@ def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
     - model_dr (str): model directory
     """
     output_dir = model_get_output_dir(model_dir)
-    logger.info(f"Start saving model to {output_dir}")
+    logger.info(f"Start saving finetuned model")
 
     # Save adapters
     trainer.save_model(output_dir)
@@ -159,7 +159,7 @@ def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
 
     try:
         # Merge model
-        logger.info("Loading PEFT model for merging...")
+        logger.debug("Loading PEFT model for merging...")
         model = AutoPeftModelForCausalLM.from_pretrained(
             output_dir,
             device_map="auto",
@@ -173,8 +173,8 @@ def merge_and_save_model(trainer, tokenizer, model_name: str, model_dir: str):
         model_merged.save_pretrained(output_merged_dir, safe_serialization=True)
         tokenizer.save_pretrained(output_merged_dir)
 
-        logger.info(f"✅ Fine-tuned model merged and saved to {output_merged_dir}")
-        mlflow_log_model(model_merged, tokenizer)
+        logger.info(f"✅ Model merged and saved to {output_merged_dir}")
+        mlflow_log_model(model_name, model_merged, tokenizer)
 
         return model_merged, tokenizer
 
