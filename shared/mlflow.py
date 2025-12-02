@@ -111,7 +111,7 @@ def mlflow_active_model(model_name: str = None, model_id: str = None):
     mlflow.set_active_model(model_id=model_id, model_name=model_name)
 
 
-def mlflow_start(model_name: str, run_type: RUN_TYPES = None, tags: dict = None, experiment_name: str = None):
+def mlflow_start(model_name: str, run_type: RUN_TYPES = None, tags: dict = None):
     if not mlflow_enabled():
         return
 
@@ -120,8 +120,9 @@ def mlflow_start(model_name: str, run_type: RUN_TYPES = None, tags: dict = None,
             tags["run_type"] = run_type
         else:
             tags = {"run_type": run_type}
-    # Look for env MLFLOW_EXPERIMENT_NAME
-    mlflow.start_run(run_name=mlflow_run_name(model_name), experiment_name=experiment_name, tags=tags)
+
+    # Look for env MLFLOW_EXPERIMENT_NAME else 'Default'
+    mlflow.start_run(run_name=mlflow_run_name(model_name), tags=tags)
 
 
 def mlflow_end():
