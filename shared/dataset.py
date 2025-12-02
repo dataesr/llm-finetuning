@@ -1,7 +1,7 @@
 import os
 import json
 from datasets import load_dataset, Dataset
-from shared.utils import timestamp
+from shared.mlflow import mlflow_log_dataset, mlflow_log_params
 from shared.logger import get_logger
 
 logger = get_logger(name=__name__)
@@ -94,6 +94,10 @@ def get_dataset(object_name: str, dataset_split: str = "train", as_pandas: bool 
             dataset_extras["dataset_format"] = dataset_format
 
     # TODO: add randomness ?
+
+    # Log into mlflow
+    mlflow_log_dataset(object_name, dataset, dataset_split=dataset_split)
+    mlflow_log_params(dataset_extras)
 
     if as_pandas:
         return dataset.to_pandas(), dataset_extras

@@ -27,10 +27,6 @@ def _sanitize_name(name: str) -> str:
     return last_name.replace(" ", "-").replace(":", "-").lower()
 
 
-def _timestamp() -> str:
-    return time.strftime("%Y%m%d-%H%M%S")
-
-
 def mlflow_enabled():
     if os.getenv("MLFLOW_TRACKING_URI"):
         return True
@@ -48,15 +44,15 @@ def mlflow_run_name(model_name: str, run_type: RUN_TYPES = None):
     return run_name
 
 
-def mlflow_log_dataset(dataset_name: str, dataset: Dataset, **metadata):
+def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str = "train", **metadata):
     if not mlflow_enabled():
         return
 
     name = _sanitize_name(dataset_name)
     commit_hash = get_commit_hash(dataset)
     if commit_hash:
-
-        dataset_source = HuggingFaceDatasetSource(dataset_name)
+        metadata["commit_hash"] = commit_hash
+        dataset_source = HuggingFaceDatasetSource(dataset_name, split=dataset_split)
         mlflow_dataset = from_huggingface(dataset, source=dataset_source, name=name)
         mlflow.log_input(mlflow_dataset, context="training", tags=metadata)
     else:

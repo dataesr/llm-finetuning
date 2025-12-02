@@ -1,5 +1,5 @@
 import importlib
-from shared.mlflow import mlflow_start, mlflow_end, mlflow_log_dataset, mlflow_log_params
+from shared.mlflow import mlflow_start, mlflow_end
 from shared.dataset import get_dataset
 from shared.logger import get_logger
 
@@ -14,8 +14,6 @@ def model_train(model_name: str, model_dir: str, pipeline_name: str, dataset_nam
 
     # Load dataset
     dataset, dataset_extras = get_dataset(dataset_name, **kwargs)
-    mlflow_log_dataset(dataset_name, dataset)
-    mlflow_log_params(dataset_extras)
 
     # Get pipeline
     pipeline = importlib.import_module(f"core.pipeline.{pipeline_name}")
