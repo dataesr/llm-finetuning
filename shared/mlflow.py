@@ -1,5 +1,4 @@
 import os
-import time
 from typing import Literal
 import mlflow
 import mlflow.data
@@ -8,7 +7,7 @@ from mlflow.data.huggingface_dataset import from_huggingface
 from mlflow.data.meta_dataset import MetaDataset
 from mlflow.data.filesystem_dataset_source import FileSystemDatasetSource
 from datasets import Dataset
-from shared.dataset import get_commit_hash, get_file
+
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,6 +44,8 @@ def mlflow_run_name(model_name: str, run_type: RUN_TYPES = None):
 
 
 def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str = "train", **metadata):
+    from shared.dataset import get_commit_hash, get_file
+
     if not mlflow_enabled():
         return
 
@@ -55,10 +56,12 @@ def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str =
         dataset_source = HuggingFaceDatasetSource(dataset_name, split=dataset_split)
         mlflow_dataset = from_huggingface(dataset, source=dataset_source, name=name)
         mlflow.log_input(mlflow_dataset, context="training", tags=metadata)
+        logger.debug(f"Logged dataset {dataset_name} from {dataset_source.path}")
     else:
         dataset_source = FileSystemDatasetSource(uri=f"s3://{get_file(dataset_name)}")
         mlflow_dataset = MetaDataset(source=dataset_source, name=name)
         mlflow.log_input(dataset, context="training", tags=metadata)
+        logger.debug(f"Logged dataset {dataset_name} from {dataset_source.uri}")
 
 
 def mlflow_log_params(params: dict):
@@ -88,13 +91,14 @@ def mlflow_log_model(model_name: str, model, tokenizer):
     if not mlflow_enabled():
         return
 
-    model_name = os.getenv("MLFLOW_MODEL_NAME") or os.getenv("HF_PUSH_REPO") or model_name
+    register_name = os.getenv("MLFLOW_MODEL_NAME") or os.getenv("HF_PUSH_REPO") or model_name
     model_info = mlflow.transformers.log_model(
         transformers_model={"model": model, "tokenizer": tokenizer},
         tokenizer=tokenizer,
-        name="model",
-        registered_model_name=_sanitize_name(model_name),
+        name=_sanitize_name(register_name),
+        registered_model_name=_sanitize_name(register_name),
     )
+    logger.debug(f"Logged model {model_info.registered_model_version} (id={model_info.model_id})")
     mlflow.set_tags({"model_version": model_info.registered_model_version, "model_id": model_info.model_id})
 
 
@@ -105,7 +109,7 @@ def mlflow_active_model(model_name: str = None, model_id: str = None):
     model_id = model_id or os.getenv("MLFLOW_ACTIVE_MODEL_ID")
     model_name = model_name or os.getenv("MLFLOW_MODEL_NAME")
     if not model_id or not model_name:
-        logger.warning(f"No model_id and model_name not found, traces won't be linked to a model!")
+        logger.warning(f"No model_id and model_name found, traces won't be linked to a model!")
         return
 
     mlflow.set_active_model(model_id=model_id, model_name=model_name)
@@ -122,7 +126,7 @@ def mlflow_start(model_name: str, run_type: RUN_TYPES = None, tags: dict = None)
             tags = {"run_type": run_type}
 
     # Look for env MLFLOW_EXPERIMENT_NAME else 'Default'
-    mlflow.start_run(run_name=mlflow_run_name(model_name), tags=tags)
+    mlflow.start_run(run_name=mlflow_run_name(model_name, run_type=run_type), tags=tags)
 
 
 def mlflow_end():

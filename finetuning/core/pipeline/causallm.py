@@ -59,6 +59,9 @@ def load_model_and_tokenizer(model_name: str):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "right"  # to prevent warnings
+    if hasattr(tokenizer, "max_length") and tokenizer.max_length < MAX_SEQ_LENGTH:
+        logger.warning(f"Overrriding tokenizer max_length from {tokenizer.max_length} to {MAX_SEQ_LENGTH}")
+        tokenizer.max_length = MAX_SEQ_LENGTH
 
     # Load model in 4bit
     bnb_config = BitsAndBytesConfig(
