@@ -20,10 +20,14 @@ RUN_TYPES_TAGS = {
     "testing": "test",
 }
 
-def _sanitize_name(name: str) -> str:
+
+def _sanitize_name(name: str, replace_dots: bool = False) -> str:
     """Make sure the name fits alpha num naming rules (A-Za-z0-9_.-)"""
     last_name = name.split("/")[-1]
-    return last_name.replace(" ", "-").replace(":", "-").lower()
+    clean_name = last_name.replace(" ", "-").replace(":", "-")
+    if replace_dots:
+        clean_name = clean_name.replace(".", "-")
+    return clean_name.lower()
 
 
 def mlflow_enabled():
@@ -43,7 +47,7 @@ def mlflow_run_name(model_name: str, run_type: RUN_TYPES = None):
     return run_name
 
 
-def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str = "train", **metadata):
+def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str = None, **metadata):
     from shared.dataset import get_commit_hash, get_file
 
     if not mlflow_enabled():
@@ -55,12 +59,12 @@ def mlflow_log_dataset(dataset_name: str, dataset: Dataset, dataset_split: str =
         metadata["commit_hash"] = commit_hash
         dataset_source = HuggingFaceDatasetSource(dataset_name, split=dataset_split)
         mlflow_dataset = from_huggingface(dataset, source=dataset_source, name=name)
-        mlflow.log_input(mlflow_dataset, context="training", tags=metadata)
+        mlflow.log_input(mlflow_dataset, context=dataset_split, tags=metadata)
         logger.debug(f"Logged dataset {dataset_name} from {dataset_source.path}")
     else:
         dataset_source = FileSystemDatasetSource(uri=f"s3://{get_file(dataset_name)}")
         mlflow_dataset = MetaDataset(source=dataset_source, name=name)
-        mlflow.log_input(dataset, context="training", tags=metadata)
+        mlflow.log_input(dataset, context=dataset_split, tags=metadata)
         logger.debug(f"Logged dataset {dataset_name} from {dataset_source.uri}")
 
 
@@ -95,7 +99,7 @@ def mlflow_log_model(model_name: str, model, tokenizer):
     model_info = mlflow.transformers.log_model(
         transformers_model={"model": model, "tokenizer": tokenizer},
         tokenizer=tokenizer,
-        name=_sanitize_name(register_name),
+        name=_sanitize_name(register_name, replace_dots=True),
         registered_model_name=_sanitize_name(register_name),
     )
     logger.debug(f"Logged model {model_info.registered_model_version} (id={model_info.model_id})")
@@ -113,6 +117,7 @@ def mlflow_active_model(model_name: str = None, model_id: str = None):
         return
 
     mlflow.set_active_model(model_id=model_id, model_name=model_name)
+    logger.debug(f"Active model {model_id or model_name} has been set for tracking.")
 
 
 def mlflow_start(model_name: str, run_type: RUN_TYPES = None, tags: dict = None):

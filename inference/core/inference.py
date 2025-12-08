@@ -50,7 +50,7 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", d
     logger.info(f"🚀 Start inference of model {model_name} with dataset {dataset_name}")
 
     # Start mlflow run
-    mlflow_start(model_name, run_type="inference", tags={"model_name": model_name, "dataset_name": model_name})
+    mlflow_start(model_name, run_type="inference", tags={"model_name": model_name, "dataset_name": dataset_name})
     mlflow_active_model()
     # mlflow_log_params()
 
@@ -59,9 +59,10 @@ def inference(model_name: str, dataset_name: str, dataset_split: str = "eval", d
         dataset_name,
         dataset_split=dataset_split,
         dataset_config=dataset_config,
-        as_pandas=True,
+        # as_pandas=True,
     )
     mlflow_log_dataset(dataset_name, dataset, dataset_split=dataset_split)
+    dataset = dataset.to_pandas()
 
     # Get prompts from dataset
     prompts = get_prompts(dataset)
